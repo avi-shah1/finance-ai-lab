@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>M&A Target Screener</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>M&A Target Screener</h1>
+
+    <form action="{{ url_for('add_company') }}" method="POST">
+        <label>Company name<br>
+            <input type="text" name="name" required>
+        </label><br>
+
+        <label>Website<br>
+            <input type="text" name="website">
+        </label><br>
+
+        <label>Sector<br>
+            <input type="text" name="sector">
+        </label><br>
+
+        <label>Country<br>
+            <input type="text" name="country">
+        </label><br>
+
+        <label>Revenue<br>
+            <input type="text" name="revenue">
+        </label><br>
+
+        <label>Employee count<br>
+            <input type="text" name="employees">
+        </label><br>
+
+        <label>Short description<br>
+            <textarea name="description"></textarea>
+        </label><br>
+
+        <button type="submit">Add Company</button>
+    </form>
+
+    <h2>Companies</h2>
+    <table border="1" cellpadding="6">
+        <tr>
+            <th>Name</th>
+            <th>Website</th>
+            <th>Sector</th>
+            <th>Country</th>
+            <th>Revenue</th>
+            <th>Employees</th>
+            <th>Description</th>
+        </tr>
+        {% for company in companies %}
+        <tr>
+            <td>{{ company.name }}</td>
+            <td>{{ company.website }}</td>
+            <td>{{ company.sector }}</td>
+            <td>{{ company.country }}</td>
+            <td>{{ company.revenue }}</td>
+            <td>{{ company.employees }}</td>
+            <td>{{ company.description }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
