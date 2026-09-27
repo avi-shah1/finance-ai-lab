@@ -37,6 +37,7 @@ KEY_PAGE_PATTERN = re.compile(
 FIGURE_FIELDS = ["revenue", "operating_profit", "profit_before_tax", "net_income", "cash", "total_debt",
                  "creditors_due_within_one_year", "creditors_due_after_one_year",
                  "total_assets_less_current_liabilities", "net_assets", "employee_count"]
+AMOUNT_OWED_FIELDS = {"creditors_due_within_one_year", "creditors_due_after_one_year", "total_debt"}
 FLOW_FIELDS = {"revenue", "operating_profit", "profit_before_tax", "net_income", "employee_count"}
 HEADLINE = ["revenue", "operating_profit", "profit_before_tax", "net_income", "cash", "net_assets",
             "employee_count"]
@@ -50,7 +51,7 @@ Rules:
 - Copy evidence_text character-for-character from the page, including the label and the number as printed.
 - page is the 1-based page number within the PDF you were given.
 - Record the unit multiplier from the column heading (e.g. £'000 means 1000). Record the value exactly as printed before applying it.
-- Use a negative value for figures printed in brackets or described as a loss."""
+- Use a negative value for profit or asset figures printed in brackets or described as a loss. Creditors and debt are amounts owed: report them as positive numbers even if the balance sheet prints them in brackets."""
 
 
 class AIDocuments(Provider):
@@ -185,6 +186,10 @@ class AIDocuments(Provider):
             verifiable = len(text.strip()) >= 50
             confidence = fig.confidence if verifiable or fig.confidence == "low" else "medium"
             printed = Decimal(str(fig.value))
+            if field in AMOUNT_OWED_FIELDS:
+                # Balance sheets print creditors in brackets because they are
+                # deducted, not because they are negative: store the amount owed.
+                printed = abs(printed)
             value = printed * fig.unit_multiplier
             if field == "employee_count":
                 text_value, currency = f"{formatting.count(value)} (average)", None
@@ -204,7 +209,7 @@ class AIDocuments(Provider):
                 excerpt=formatting.squash(fig.evidence_text, 300),
                 location=f"Page {page_no} of {src.get('title')}",
                 evidence_page=page_no,
-                notes=(f"Printed as {printed:,} in units of {fig.unit_multiplier:,}." if fig.unit_multiplier > 1 else None),
+                notes=(f"Printed as {formatting.count(printed) if printed == printed.to_integral_value() else printed} in units of {fig.unit_multiplier:,}." if fig.unit_multiplier > 1 else None),
                 extraction_method="llm_document", extraction_model=model,
                 verification="quote_verified" if verifiable else "not_verifiable",
             ))
@@ -214,7 +219,9 @@ class AIDocuments(Provider):
             if page_no and (len(text.strip()) < 50 or verify.quote_in_text(parsed.auditor.evidence_text, text)):
                 facts.append(Fact(
                     fact_type="auditor", value_text=formatting.squash(parsed.auditor.value, 120),
-                    evidence_type="ai_extracted", confidence=parsed.auditor.confidence,
+                    evidence_type="ai_extracted",
+                    confidence=(parsed.auditor.confidence if len(text.strip()) >= 50 or parsed.auditor.confidence == "low"
+                                else "medium"),
                     excerpt=formatting.squash(parsed.auditor.evidence_text, 300),
                     location=f"Page {page_no} of {src.get('title')}", evidence_page=page_no,
                     extraction_method="llm_document", extraction_model=model,
