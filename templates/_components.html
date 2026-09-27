@@ -14,43 +14,85 @@
     <div class="empty"><span class="empty-dot" aria-hidden="true"></span>{{ message }}</div>
 {% endmacro %}
 
-{% macro unknown(text="Unknown") %}<span class="unknown">{{ text }}</span>{% endmacro %}
+{# An unknown value, with the reason (and optional detail on hover). #}
+{% macro unknown(text="Unknown", why=None) %}<span class="unknown"{% if why %} title="{{ why }}"{% endif %}>{{ text }}{% if why %}<span class="why" aria-hidden="true">?</span>{% endif %}</span>{% endmacro %}
 
 
 {# ---- Evidence & sources ---------------------------------------------- #}
 
 {% macro evidence_badge(code) %}
-    <span class="ev ev-{{ code }}">{{ vocab.EVIDENCE_TYPES[code] }}</span>
+    {%- set group = vocab.EVIDENCE_GROUPS[code] -%}
+    <span class="ev ev-{{ group }}" title="{{ vocab.GROUP_LABELS[group] }}: {{ vocab.GROUP_DESCRIPTIONS[group] }}">{{ vocab.EVIDENCE_TYPES[code] }}</span>
+{%- endmacro %}
+
+{% macro evidence_legend() %}
+    <div class="legend" aria-label="Evidence key">
+        {% for group in ["primary", "third_party", "ai", "analyst", "unknown"] %}
+            <span class="legend-item" title="{{ vocab.GROUP_DESCRIPTIONS[group] }}">
+                <span class="legend-swatch ev-{{ group }}"></span>{{ vocab.GROUP_LABELS[group] }}
+            </span>
+        {% endfor %}
+    </div>
+{% endmacro %}
+
+{# Link to a fact's source, opening a PDF at the cited page when known. #}
+{% macro fact_href(item) -%}
+    {%- set href = item.source_url | external_url -%}
+    {%- if href and item.evidence_page %}{{ href }}#page={{ item.evidence_page }}{% elif href %}{{ href }}{% endif -%}
+{%- endmacro %}
+
+{# For AI-extracted facts: which model, which page, and whether the quote was checked. #}
+{% macro ai_provenance(item) %}
+    {% if item.evidence_type in ("ai_extracted", "ai_interpretation") %}
+        <div class="ai-line">
+            AI-extracted{% if item.extraction_model %} by {{ item.extraction_model }}{% endif %}
+            {% if item.evidence_page %} · page {{ item.evidence_page }}{% endif %}
+            · {{ vocab.VERIFICATIONS.get(item.verification, "unverified") }}
+            · {{ item.confidence }} confidence
+        </div>
+    {% endif %}
 {% endmacro %}
 
 {# The clickable provenance chip shown next to every fact and event. #}
 {% macro source_ref(item) %}
-    {%- set href = item.source_url | external_url -%}
-    <span class="src" title="{{ vocab.SOURCE_TYPES[item.source_type] }} · retrieved {{ item.source_retrieved_at | fmt_date }}">
+    {%- set href = fact_href(item) | trim -%}
+    {%- set when = item.source_published_on or item.source_retrieved_at -%}
+    <span class="src" title="{{ vocab.SOURCE_TYPES[item.source_type] }}{% if item.source_title %} · {{ item.source_title }}{% endif %}{% if item.confidence %} · {{ item.confidence }} confidence{% endif %}{% if item.location %} · {{ item.location }}{% endif %}{% if item.extraction_method %} · {{ vocab.EXTRACTION_METHODS[item.extraction_method] }}{% endif %}{% if item.extraction_model %} ({{ item.extraction_model }}){% endif %}{% if item.verification %} · {{ vocab.VERIFICATIONS[item.verification] }}{% endif %} · retrieved {{ item.source_retrieved_at | fmt_date }}">
         {{ evidence_badge(item.evidence_type) }}
         {% if href %}
-            <a class="src-name" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ item.source_name }}<span aria-hidden="true"> ↗</span></a>
-        {% elif item.source_name != vocab.EVIDENCE_TYPES[item.evidence_type] %}
+            <a class="src-name" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ item.source_title or item.source_name }}<span aria-hidden="true"> ↗</span></a>
+        {% elif item.source_name != vocab.EVIDENCE_TYPES[item.evidence_type] and item.source_name != "Analyst entry" %}
             <span class="src-name">{{ item.source_name }}</span>
         {% endif %}
-        {% if item.source_published_on %}<span class="src-date">{{ item.source_published_on | fmt_date }}</span>{% endif %}
+        {% if when %}<span class="src-date">{{ when | fmt_date }}</span>{% endif %}
     </span>
+{%- endmacro %}
+
+{# Conflict flag: other sources give a materially different number. #}
+{% macro conflict_flag(conflicts) %}
+    {% if conflicts %}
+        <span class="conflict" title="{% for c in conflicts %}{{ c.value_text }} per {{ c.source_title or c.source_name }} ({{ vocab.EVIDENCE_TYPES[c.evidence_type] }}){% if c.notes %}: {{ c.notes }}{% endif %}{{ '; ' if not loop.last }}{% endfor %}. Shown value follows source precedence.">⚠ Sources differ</span>
+    {% endif %}
 {% endmacro %}
 
-{# One labelled fact: current value plus its source, or "Unknown". #}
-{% macro fact_field(profile, code, label, empty="Unknown") %}
+{# One labelled fact: preferred value, period, source, conflicts, or the
+   reason it's unknown. #}
+{% macro fact_field(profile, code, label, empty=None) %}
     {% set f = profile.fact(code) %}
     <div class="field">
         <dt>{{ label }}</dt>
         <dd>
             {% if f %}
                 <span class="val">{{ f.value_text }}</span>
-                {% if f.period %}<span class="muted">{{ f.period }}</span>{% endif %}
+                {% if f.period %}<span class="period">{{ f.period }}</span>{% endif %}
                 {{ source_ref(f) }}
-                {% set n = profile.all(code) | length %}
-                {% if n > 1 %}<span class="muted small">+{{ n - 1 }} other value{{ "s" if n > 2 }}</span>{% endif %}
+                {{ conflict_flag(profile.conflicts(f)) }}
+                {{ ai_provenance(f) }}
+                {% set alts = profile.alternatives(f) | rejectattr("source_id", "equalto", f.source_id) | list %}
+                {% if alts and not profile.conflicts(f) %}<span class="muted small" title="{% for a in alts %}{{ a.value_text }} per {{ a.source_name }}{{ '; ' if not loop.last }}{% endfor %}">also in {{ alts | map(attribute="source_name") | unique | join(", ") }}</span>{% endif %}
+                {% if f.notes and f.confidence == "medium" %}<div class="note">{{ f.notes }}</div>{% endif %}
             {% else %}
-                {{ unknown(empty) }}
+                {{ unknown(empty or profile.unknown_reason(code), profile.unknown_explanation(code)) }}
             {% endif %}
         </dd>
     </div>
@@ -65,11 +107,28 @@
                     <div class="evidence-main">
                         {% if show_label %}<span class="muted">{{ f.label }}:</span>{% endif %}
                         <span class="val">{{ f.value_text }}</span>
-                        {% if f.period %}<span class="muted">{{ f.period }}</span>{% endif %}
-                        {% if f.as_of %}<span class="muted">as of {{ f.as_of | fmt_date }}</span>{% endif %}
+                        {% if f.period %}<span class="period">{{ f.period }}</span>{% endif %}
+                        {% if f.as_of and not f.period %}<span class="muted small">as of {{ f.as_of | fmt_date }}</span>{% endif %}
                     </div>
                     {% if f.excerpt %}<blockquote class="excerpt">“{{ f.excerpt }}”</blockquote>{% endif %}
                     {{ source_ref(f) }}
+                    {{ ai_provenance(f) }}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        {{ empty_state(empty) }}
+    {% endif %}
+{% endmacro %}
+
+{# Compact chips for many short values (officers, SIC codes, products). #}
+{% macro fact_chips(facts, empty) %}
+    {% if facts %}
+        <ul class="chip-list">
+            {% for f in facts %}
+                {%- set href = fact_href(f) | trim -%}
+                <li class="chip ev-border-{{ vocab.EVIDENCE_GROUPS[f.evidence_type] }}" title="{{ vocab.EVIDENCE_TYPES[f.evidence_type] }} · {{ f.source_title or f.source_name }}{% if f.extraction_method %} · {{ vocab.EXTRACTION_METHODS[f.extraction_method] }}{% endif %}{% if f.extraction_model %} ({{ f.extraction_model }}){% endif %}{% if f.excerpt %} · “{{ f.excerpt }}”{% endif %}">
+                    {% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ f.value_text }}</a>{% else %}{{ f.value_text }}{% endif %}
                 </li>
             {% endfor %}
         </ul>
@@ -98,24 +157,115 @@
     {% endif %}
 {% endmacro %}
 
-{# Full source register for a company. #}
-{% macro sources_table(sources) %}
-    {% if sources %}
+
+{# ---- Financials ---------------------------------------------------- #}
+
+{% macro financial_table(profile) %}
+    {% set table = profile.financial_table() %}
+    {% if table.rows %}
+        <div class="table-wrap">
+            <table class="data-table fin-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        {% for p in table.periods %}<th class="num">{{ p | fmt_date }}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in table.rows %}
+                        <tr>
+                            <th scope="row">{{ row.label }}</th>
+                            {% for p in table.periods %}
+                                {% set cell = row.cells.get(p) %}
+                                <td class="num">
+                                    {% if cell %}
+                                        {% set f = cell.fact %}
+                                        {%- set href = fact_href(f) | trim -%}
+                                        <div class="fin-val">
+                                            <span class="ev-dot ev-{{ vocab.EVIDENCE_GROUPS[f.evidence_type] }}" aria-hidden="true"></span>
+                                            {{ f.value_text }}
+                                            {% if cell.conflicts %}<span class="conflict-dot" title="{% for c in cell.conflicts %}{{ c.value_text }} per {{ c.source_name }}{% if c.notes %} ({{ c.notes }}){% endif %}{{ '; ' if not loop.last }}{% endfor %}">⚠</span>{% endif %}
+                                        </div>
+                                        <div class="fin-src">
+                                            {% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer" title="{{ f.source_title or '' }}{% if f.location %} · {{ f.location }}{% endif %}{% if f.extraction_method %} · {{ vocab.EXTRACTION_METHODS[f.extraction_method] }}{% endif %}{% if f.excerpt %} · “{{ f.excerpt }}”{% endif %}">{{ f.source_name }}{% if f.evidence_page %} p.{{ f.evidence_page }}{% endif %} ↗</a>{% else %}{{ f.source_name }}{% endif %}
+                                            {% if cell.others %}<span class="muted" title="{% for o in cell.others %}{{ o.value_text }} per {{ o.source_name }}{{ '; ' if not loop.last }}{% endfor %}">+{{ cell.others | length }}</span>{% endif %}
+                                        </div>
+                                        {% if f.notes and f.confidence == "medium" and f.evidence_type == "verified" %}<div class="note">{{ f.notes }}</div>{% endif %}
+                                    {% else %}
+                                        {{ unknown("—", profile.unknown_explanation(row.code)) }}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="hint">Columns are period-end dates. Figures follow source precedence: tagged filings (SEC / Companies House XBRL) first, then AI-extracted figures from filed PDFs (violet), then Yahoo Finance. ⚠ marks periods where sources disagree; hover to see both values.</p>
+    {% else %}
+        {{ empty_state("No reported financials yet." if profile.runs else "Not researched yet.") }}
+    {% endif %}
+{% endmacro %}
+
+
+{# ---- Documents & source register ------------------------------------ #}
+
+{% macro documents_table(profile) %}
+    {% set docs = profile.documents %}
+    {% if docs %}
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>Document</th><th>Type</th><th class="num">Period end</th><th class="num">Filed</th><th>Extraction</th></tr></thead>
+                <tbody>
+                    {% for d in docs %}
+                        {% set href = d.url | external_url %}
+                        <tr>
+                            <td>
+                                {% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ d.title or d.name }} ↗</a>{% else %}{{ d.title or d.name }}{% endif %}
+                                <div class="muted small">{{ d.name }}</div>
+                            </td>
+                            <td><span class="tag">{{ vocab.DOCUMENT_TYPES.get(d.document_type, d.document_type) }}</span></td>
+                            <td class="num">{{ d.period_end | fmt_date or "—" }}</td>
+                            <td class="num">{{ d.published_on | fmt_date or "—" }}</td>
+                            <td>
+                                {% if d.parse_status %}<span class="status status-{{ d.parse_status }}">{{ vocab.PARSE_STATUSES[d.parse_status] }}</span>{% endif %}
+                                {% if d.fact_count %}<span class="muted small">{{ d.fact_count }} facts</span>{% endif %}
+                                {% if d.ai_fact_count %}<span class="status tone-ai">{{ d.ai_fact_count }} AI-extracted</span>{% endif %}
+                                {% if d.notes %}<div class="muted small">{{ d.notes }}</div>{% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        {{ empty_state("No filings or reports retrieved yet." if profile.runs else "Not researched yet.") }}
+    {% endif %}
+{% endmacro %}
+
+{# Every source for a company and what it supports. #}
+{% macro sources_register(profile) %}
+    {% set rows = profile.source_rows %}
+    {% if rows %}
         <div class="table-wrap">
             <table class="data-table">
                 <thead>
-                    <tr><th>Source</th><th>Type</th><th>Title</th><th>Published</th><th>Retrieved</th><th></th></tr>
+                    <tr><th>Source</th><th>Type</th><th class="num">Source date</th><th class="num">Retrieved</th><th>Supports</th></tr>
                 </thead>
                 <tbody>
-                    {% for s in sources %}
-                        {% set href = s.source_url | external_url %}
+                    {% for s in rows %}
+                        {% set href = s.url | external_url %}
                         <tr>
-                            <td>{{ s.source_name }}</td>
+                            <td>
+                                {% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ s.title or s.name }} ↗</a>{% else %}{{ s.title or s.name }}{% endif %}
+                                <div class="muted small">{{ s.name }}{% if s.provider != "manual" %} · via {{ provider_labels.get(s.provider, s.provider) }}{% endif %}</div>
+                            </td>
                             <td><span class="tag">{{ vocab.SOURCE_TYPES[s.source_type] }}</span></td>
-                            <td>{{ s.source_title or "" }}</td>
-                            <td class="num">{{ s.source_published_on | fmt_date or "—" }}</td>
-                            <td class="num">{{ s.source_retrieved_at | fmt_date }}</td>
-                            <td>{% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer">Open ↗</a>{% endif %}</td>
+                            <td class="num">{{ s.published_on | fmt_date or "—" }}</td>
+                            <td class="num">{{ s.retrieved_at | fmt_date }}</td>
+                            <td class="supports">
+                                {% if s.supports %}{{ s.supports | join(", ") }}{% else %}<span class="muted">Document metadata only</span>{% endif %}
+                            </td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -124,6 +274,120 @@
     {% else %}
         {{ empty_state("No sources recorded yet.") }}
     {% endif %}
+{% endmacro %}
+
+
+{# ---- Research panel -------------------------------------------------- #}
+
+{% macro research_panel(profile, next_url) %}
+    {% set c = profile.company %}
+    <section class="panel research" id="research">
+        <div class="panel-head">
+            <div>
+                <h2>Research</h2>
+                <p class="muted small">
+                    {% if profile.last_researched %}Last run {{ profile.last_researched | fmt_datetime }}{% else %}Not researched yet{% endif %}
+                </p>
+            </div>
+            <form method="post" action="{{ url_for('run_research', company_id=c.id) }}" class="research-form">
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <button class="btn btn-primary" type="submit" data-busy="Researching… (up to a minute)">{{ "Re-run research" if profile.runs else "Run research" }}</button>
+            </form>
+        </div>
+
+        <h3 class="subhead">Structured sources</h3>
+        <ul class="provider-list">
+            {% for name, label in structured_labels.items() %}
+                {% set run = profile.runs.get(name) %}
+                <li class="provider">
+                    <div class="provider-head">
+                        <span class="provider-name">{{ label }}</span>
+                        {% if run %}
+                            {% set status = vocab.RUN_STATUSES[run.status] %}
+                            <span class="status tone-{{ status[1] }}">{{ status[0] }}</span>
+                        {% else %}
+                            <span class="status tone-muted">Not researched</span>
+                        {% endif %}
+                    </div>
+                    {% if run %}
+                        <p class="provider-msg">{{ run.message }}</p>
+                        {% if run.detail and run.detail.candidates %}
+                            <ul class="candidates">
+                                {% for cand in run.detail.candidates %}
+                                    <li>{{ cand.name }} · <code>{{ cand.number }}</code>{% if cand.status %} · {{ cand.status }}{% endif %}{% if cand.address %} · <span class="muted">{{ cand.address }}</span>{% endif %}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+
+        <div class="ai-group">
+            <div class="panel-head">
+                <div>
+                    <h3 class="subhead">AI extraction (Claude)</h3>
+                    <p class="muted small">Reads PDF accounts and web pages already retrieved above and extracts only explicitly stated facts. Every quote is checked against the source before storing. Uses the Anthropic API (paid per run); unchanged documents are skipped.</p>
+                </div>
+                <form method="post" action="{{ url_for('run_ai_extraction', company_id=c.id) }}">
+                    <input type="hidden" name="next" value="{{ next_url }}">
+                    <button class="btn btn-ai" type="submit" data-busy="Extracting… (can take a couple of minutes)">Run AI extraction</button>
+                </form>
+            </div>
+            <ul class="provider-list">
+                {% for name, label in ai_labels.items() %}
+                    {% set run = profile.runs.get(name) %}
+                    <li class="provider">
+                        <div class="provider-head">
+                            <span class="provider-name">{{ label }}</span>
+                            {% if run %}
+                                {% set status = vocab.RUN_STATUSES[run.status] %}
+                                <span class="status tone-{{ status[1] }}">{{ status[0] }}</span>
+                            {% else %}
+                                <span class="status tone-muted">Not run</span>
+                            {% endif %}
+                        </div>
+                        {% if run %}
+                            <p class="provider-msg">{{ run.message }}</p>
+                            {% set all_rejected = (run.detail.rejected or []) + ((run.detail.documents or []) | map(attribute="rejected") | sum(start=[])) if run.detail else [] %}
+                            {% if all_rejected %}
+                                <details class="rejected">
+                                    <summary>{{ all_rejected | length }} extracted value{{ "s" if all_rejected | length != 1 }} rejected by verification</summary>
+                                    <ul>{% for r in all_rejected %}<li>{{ r.fact_type }}{% if r.value %} “{{ r.value }}”{% endif %}: {{ r.reason }}</li>{% endfor %}</ul>
+                                </details>
+                            {% endif %}
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <details class="panel-inset identity">
+            <summary>Identity &amp; identifiers
+                {% for scheme, row in profile.identifiers.items() %}
+                    <span class="id-chip" title="{{ vocab.MATCH_METHODS[row.match_method] }}">{{ vocab.IDENTIFIER_SCHEMES[scheme] }}: {{ row.value }}{% if row.match_method == "auto_exact_name" %} ⚑{% endif %}</span>
+                {% endfor %}
+            </summary>
+            <p class="hint">Identifiers tell each source exactly which company to research. Values you enter here are trusted over automatic name matches (⚑).</p>
+            <form class="form" method="post" action="{{ url_for('update_identifiers', company_id=c.id) }}">
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <div class="grid-3">
+                    <label>Website <input type="text" name="website" value="{{ c.website or '' }}" placeholder="example.com"></label>
+                    <label>HQ country <input type="text" name="hq_country" value="{{ c.hq_country or '' }}" placeholder="e.g. UK"></label>
+                    <label>Sector <input type="text" name="sector" value="{{ c.sector or '' }}"></label>
+                    {% for scheme, label in vocab.IDENTIFIER_SCHEMES.items() %}
+                        {% set row = profile.identifiers.get(scheme) %}
+                        <label>{{ label }}
+                            <input type="text" name="{{ scheme }}" value="{{ row.value if row else '' }}"
+                                   placeholder="{{ {'companies_house': 'e.g. 01234567', 'sec_cik': 'e.g. 1108524', 'ticker': 'e.g. CRM, VOD.L'}[scheme] }}">
+                            {% if row %}<span class="hint">{{ vocab.MATCH_METHODS[row.match_method] }}</span>{% endif %}
+                        </label>
+                    {% endfor %}
+                </div>
+                <button class="btn" type="submit">Save identity</button>
+            </form>
+        </details>
+    </section>
 {% endmacro %}
 
 
@@ -143,6 +407,18 @@
         <div class="coverage-bar"><span style="width: {{ (100 * cov.known / cov.total) | round | int }}%"></span></div>
         <span class="coverage-text">{{ cov.known }}/{{ cov.total }} · {{ cov.sources }} source{{ "" if cov.sources == 1 else "s" }}</span>
     </div>
+{% endmacro %}
+
+{# A table cell value: preferred fact + period + evidence dot, or unknown reason. #}
+{% macro cell_value(p, code) %}
+    {% set f = p.fact(code) %}
+    {% if f %}
+        <span class="ev-dot ev-{{ vocab.EVIDENCE_GROUPS[f.evidence_type] }}" title="{{ vocab.EVIDENCE_TYPES[f.evidence_type] }} · {{ f.source_title or f.source_name }}"></span>
+        {{ f.value_text }}
+        {% if f.period %}<div class="muted small">{{ f.period }}</div>{% endif %}
+    {% else %}
+        {{ unknown(p.unknown_reason(code), p.unknown_explanation(code)) }}
+    {% endif %}
 {% endmacro %}
 
 {# Candidate/company table. On narrow screens CSS turns rows into cards. #}
@@ -174,21 +450,21 @@
                         </td>
                         <td data-label="Description" class="desc">
                             {% set d = p.fact("description") %}
-                            {{ d.value_text | truncate(110) if d else unknown("Not researched yet") }}
+                            {{ d.value_text | truncate(110) if d else unknown(p.unknown_reason("description")) }}
                         </td>
                         <td data-label="Location">{{ c.hq_country or unknown() }}</td>
-                        {% for code in ["employee_count", "revenue", "ownership_status"] %}
-                            {% set f = p.fact(code) %}
-                            <td data-label="{{ ['Employees', 'Revenue', 'Ownership'][loop.index0] }}" class="{{ 'num' if loop.index0 < 2 }}">
-                                {% if f %}{{ f.value_text }} <span class="ev-dot ev-{{ f.evidence_type }}" title="{{ vocab.EVIDENCE_TYPES[f.evidence_type] }} · {{ f.source_name }}"></span>{% else %}{{ unknown() }}{% endif %}
-                            </td>
-                        {% endfor %}
+                        <td data-label="Employees" class="num">{{ cell_value(p, "employee_count") }}</td>
+                        <td data-label="Revenue" class="num">{{ cell_value(p, "revenue") }}</td>
+                        <td data-label="Ownership">
+                            {% set own = p.fact("ownership_status") or p.fact("company_type") %}
+                            {% if own %}<span class="ev-dot ev-{{ vocab.EVIDENCE_GROUPS[own.evidence_type] }}"></span> {{ own.value_text }}{% else %}{{ unknown(p.unknown_reason("ownership_status")) }}{% endif %}
+                        </td>
                         <td data-label="Latest event">
                             {% set e = p.latest_event %}
                             {% if e %}
                                 <span class="tag">{{ vocab.EVENT_TYPES[e.event_type] }}</span> {{ e.title | truncate(60) }}
                                 {% if e.event_date %}<div class="muted small">{{ e.event_date | fmt_date }}</div>{% endif %}
-                            {% else %}{{ unknown("None recorded") }}{% endif %}
+                            {% else %}{{ unknown("Not researched") }}{% endif %}
                         </td>
                         {% if search %}
                             <td data-label="Screening view">{{ rating_chip(assessments.get(c.id, {}).get(("overall", None)), overall=true) }}</td>
@@ -243,7 +519,7 @@
                 <input type="date" name="source_published_on">
             </label>
         </div>
-        <p class="hint">“Verified” requires a URL. Leave source type as Manual entry for your own notes.</p>
+        <p class="hint">“Verified filing” requires a URL. Leave source type as Manual entry for your own notes.</p>
     </fieldset>
 {% endmacro %}
 
@@ -258,13 +534,13 @@
                 <input type="text" name="website" placeholder="example.com">
             </label>
             <label>HQ country
-                <input type="text" name="hq_country">
+                <input type="text" name="hq_country" placeholder="e.g. UK">
             </label>
             <label>Sector
                 <input type="text" name="sector">
             </label>
         </div>
-        <p class="hint">Optional facts: only fill in what you have evidence for. Blank fields stay Unknown.</p>
+        <p class="hint">Add the website and HQ country so research can find the right sources. You can add a company number or ticker on the company page. Optional facts below: only fill in what you have evidence for.</p>
         <div class="grid-2">
             <label>Revenue
                 <input type="text" name="revenue" placeholder="e.g. £12m (FY2024)">

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-written test fixture in the shape of a Companies House iXBRL
+     accounts filing. The company and numbers are invented for tests. -->
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:ix="http://www.xbrl.org/2013/inlineXBRL"
+      xmlns:xbrli="http://www.xbrl.org/2003/instance"
+      xmlns:xbrldi="http://xbrl.org/2006/xbrldi"
+      xmlns:uk-core="http://xbrl.frc.org.uk/fr/2021-01-01/core"
+      xmlns:uk-bus="http://xbrl.frc.org.uk/cd/2021-01-01/business"
+      xmlns:ixt="http://www.xbrl.org/inlineXBRL/transformation/2010-04-20">
+<head><title>Test Accounts</title></head>
+<body>
+<div style="display:none">
+  <ix:header>
+    <ix:hidden>
+      <ix:nonFraction name="uk-core:AverageNumberEmployeesDuringPeriod" contextRef="FY25" unitRef="GBP" decimals="0">42</ix:nonFraction>
+    </ix:hidden>
+    <ix:resources>
+      <xbrli:context id="FY25">
+        <xbrli:entity><xbrli:identifier scheme="http://www.companieshouse.gov.uk/">01234567</xbrli:identifier></xbrli:entity>
+        <xbrli:period><xbrli:startDate>2024-04-01</xbrli:startDate><xbrli:endDate>2025-03-31</xbrli:endDate></xbrli:period>
+      </xbrli:context>
+      <xbrli:context id="FY24">
+        <xbrli:entity><xbrli:identifier scheme="http://www.companieshouse.gov.uk/">01234567</xbrli:identifier></xbrli:entity>
+        <xbrli:period><xbrli:startDate>2023-04-01</xbrli:startDate><xbrli:endDate>2024-03-31</xbrli:endDate></xbrli:period>
+      </xbrli:context>
+      <xbrli:context id="BS25">
+        <xbrli:entity><xbrli:identifier scheme="http://www.companieshouse.gov.uk/">01234567</xbrli:identifier></xbrli:entity>
+        <xbrli:period><xbrli:instant>2025-03-31</xbrli:instant></xbrli:period>
+      </xbrli:context>
+      <xbrli:context id="BS25_share_capital">
+        <xbrli:entity>
+          <xbrli:identifier scheme="http://www.companieshouse.gov.uk/">01234567</xbrli:identifier>
+          <xbrli:segment><xbrldi:explicitMember dimension="uk-core:EquityClassesDimension">uk-core:ShareCapital</xbrldi:explicitMember></xbrli:segment>
+        </xbrli:entity>
+        <xbrli:period><xbrli:instant>2025-03-31</xbrli:instant></xbrli:period>
+      </xbrli:context>
+      <xbrli:unit id="GBP"><xbrli:measure>iso4217:GBP</xbrli:measure></xbrli:unit>
+    </ix:resources>
+  </ix:header>
+</div>
+
+<table>
+  <tr><td>Turnover</td><td>3</td>
+      <td><ix:nonFraction name="uk-core:TurnoverRevenue" contextRef="FY25" unitRef="GBP" decimals="-3" scale="3" format="ixt:numdotdecimal">12,400</ix:nonFraction></td>
+      <td><ix:nonFraction name="uk-core:TurnoverRevenue" contextRef="FY24" unitRef="GBP" decimals="-3" scale="3" format="ixt:numdotdecimal">11,020</ix:nonFraction></td></tr>
+  <tr><td>Operating loss</td><td></td>
+      <td>(<ix:nonFraction name="uk-core:OperatingProfitLoss" contextRef="FY25" unitRef="GBP" decimals="-3" scale="3" sign="-" format="ixt:numdotdecimal">1,250</ix:nonFraction>)</td></tr>
+  <tr><td>Cash at bank and in hand</td><td></td>
+      <td><ix:nonFraction name="uk-core:CashBankOnHand" contextRef="BS25" unitRef="GBP" decimals="0" format="ixt:fixed-zero">-</ix:nonFraction></td></tr>
+  <tr><td>Net assets</td><td></td>
+      <td>(<ix:nonFraction name="uk-core:NetAssetsLiabilities" contextRef="BS25" unitRef="GBP" decimals="0" format="ixt:numdotdecimal">3,686</ix:nonFraction>)</td></tr>
+  <tr><td>Called up share capital</td><td></td>
+      <td><ix:nonFraction name="uk-core:NetAssetsLiabilities" contextRef="BS25_share_capital" unitRef="GBP" decimals="0">999</ix:nonFraction></td></tr>
+</table>
+<p>The average number of employees during the year was
+   <ix:nonFraction name="uk-core:AverageNumberEmployeesDuringPeriod" contextRef="FY25" unitRef="GBP" decimals="0">42</ix:nonFraction>.</p>
+<p>Auditor: <ix:nonNumeric name="uk-bus:NameEntityAuditors" contextRef="FY25">Example Audit LLP</ix:nonNumeric></p>
+</body>
+</html>

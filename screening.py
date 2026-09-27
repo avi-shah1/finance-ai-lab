@@ -9,16 +9,55 @@ how the UI groups them. Nothing here calculates a score.
 # How much weight a piece of evidence can bear. Unknown information has no
 # code: it is simply the absence of a fact.
 EVIDENCE_TYPES = {
-    "verified": "Verified",
-    "company_reported": "Company-reported",
+    "verified": "Verified filing",
+    "company_reported": "Company source",
+    "third_party": "Third-party",
     "third_party_estimate": "Third-party estimate",
+    "ai_extracted": "AI-extracted",
     "ai_interpretation": "AI interpretation",
     "analyst_entry": "Analyst entry",
 }
 
-# Evidence types an analyst can pick in forms. AI interpretations will only
-# ever be written by the (future) analysis pipeline.
-MANUAL_EVIDENCE_TYPES = ["analyst_entry", "verified", "company_reported", "third_party_estimate"]
+# The four classes the dashboard distinguishes (plus manual entries).
+EVIDENCE_GROUPS = {
+    "verified": "primary",
+    "company_reported": "primary",
+    "third_party": "third_party",
+    "third_party_estimate": "third_party",
+    "ai_extracted": "ai",
+    "ai_interpretation": "ai",
+    "analyst_entry": "analyst",
+}
+GROUP_LABELS = {
+    "primary": "Primary / verified",
+    "third_party": "Third-party",
+    "ai": "AI-extracted from source",
+    "analyst": "Analyst entry",
+    "unknown": "Unknown",
+}
+GROUP_DESCRIPTIONS = {
+    "primary": "Official register or filed document, or the company's own published statement.",
+    "third_party": "Data vendor (e.g. Yahoo Finance). Useful, but unofficial.",
+    "ai": "Extracted by an AI model from a cited primary document.",
+    "analyst": "Typed in manually and not yet verified.",
+    "unknown": "No evidence found, not disclosed, or not researched yet.",
+}
+
+# Precedence when sources disagree: lower wins. A weaker source never
+# replaces a stronger one; both are kept and conflicts are flagged.
+EVIDENCE_RANK = {
+    "verified": 1,
+    "company_reported": 2,
+    "ai_extracted": 3,
+    "analyst_entry": 4,
+    "third_party": 5,
+    "third_party_estimate": 6,
+    "ai_interpretation": 7,
+}
+
+# Evidence types an analyst can pick in forms. AI types are only ever
+# written by the (future) AI pipeline.
+MANUAL_EVIDENCE_TYPES = ["analyst_entry", "verified", "company_reported", "third_party", "third_party_estimate"]
 
 SOURCE_TYPES = {
     "manual_entry": "Manual entry",
@@ -32,6 +71,70 @@ SOURCE_TYPES = {
     "patent_record": "Patent record",
     "third_party_database": "Third-party database",
 }
+
+DOCUMENT_TYPES = {
+    "annual_accounts": "Annual accounts",
+    "group_accounts": "Group accounts",
+    "annual_report": "Annual report",
+    "annual_report_10k": "Form 10-K",
+    "annual_report_20f": "Form 20-F",
+    "annual_report_40f": "Form 40-F",
+}
+
+PARSE_STATUSES = {
+    "parsed": "Values extracted",
+    "not_parsed": "Not extracted yet",
+    "unreadable": "Unreadable (scanned)",
+    "no_document": "No document filed",
+    "failed": "Retrieval failed",
+}
+
+# research_runs.status -> (label, tone) for the research panel
+RUN_STATUSES = {
+    "success": ("Complete", "good"),
+    "partial": ("Partly complete", "warn"),
+    "not_found": ("No match found", "muted"),
+    "ambiguous": ("Needs identifier", "warn"),
+    "not_applicable": ("Not applicable", "muted"),
+    "credentials_missing": ("API credentials required", "bad"),
+    "rate_limited": ("Rate limited", "bad"),
+    "source_unavailable": ("Source unavailable", "bad"),
+    "error": ("Error", "bad"),
+}
+
+IDENTIFIER_SCHEMES = {
+    "companies_house": "Companies House number",
+    "sec_cik": "SEC CIK",
+    "ticker": "Stock ticker",
+}
+MATCH_METHODS = {
+    "analyst_entered": "entered by you",
+    "auto_exact_name": "auto-matched by exact name: please confirm",
+    "derived": "from another source",
+}
+
+# How a fact was obtained (facts.extraction_method).
+EXTRACTION_METHODS = {
+    "manual": "Entered manually",
+    "structured_api": "Structured register / API field",
+    "xbrl_tag": "Value tagged by the filer (XBRL)",
+    "html_rule": "Rule-based reading of a web page",
+    "third_party_api": "Third-party data API",
+    "llm_document": "AI-extracted from the filed document",
+    "llm_website": "AI-extracted from the company web page",
+}
+VERIFICATIONS = {
+    "quote_verified": "quote checked against source text",
+    "not_verifiable": "scanned page: quote could not be checked",
+}
+
+# Rows of the financials table, in order.
+FINANCIAL_ROWS = [
+    "revenue", "gross_profit", "ebitda", "operating_profit", "profit_before_tax", "net_income",
+    "cash", "total_debt", "creditors_due_within_one_year", "creditors_due_after_one_year",
+    "total_assets", "total_liabilities", "total_assets_less_current_liabilities", "net_assets",
+    "employee_count",
+]
 
 EVENT_TYPES = {
     "acquisition": "Acquisition",
@@ -104,8 +207,8 @@ DIMENSIONS = [
             "listing_status": "Public / private status",
             "acquisition_status": "Existing acquisition status",
         },
-        "fact_types": ["ownership_status", "parent_company", "total_funding",
-                       "last_funding_round", "investor", "legal_status"],
+        "fact_types": ["ownership_status", "company_type", "exchange", "parent_company", "psc",
+                       "total_funding", "last_funding_round", "investor", "legal_status"],
         "event_types": ["acquisition", "fundraising"],
     },
     {

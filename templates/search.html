@@ -20,9 +20,9 @@
 
 <ol class="pipeline" aria-label="Research pipeline">
     <li class="stage stage-done"><span class="stage-name">Search defined</span><span class="stage-state">Complete</span></li>
-    <li class="stage"><span class="stage-name">Buyer profile</span><span class="stage-state">Not connected yet</span></li>
+    <li class="stage {{ 'stage-done' if buyer.has_research }}"><span class="stage-name">Buyer profile</span><span class="stage-state">{{ "Researched" if buyer.has_research else "Run from buyer card" }}</span></li>
     <li class="stage"><span class="stage-name">Target discovery</span><span class="stage-state">Not connected yet · add manually</span></li>
-    <li class="stage"><span class="stage-name">Evidence gathering</span><span class="stage-state">Not connected yet</span></li>
+    <li class="stage {{ 'stage-done' if profiles and profiles | selectattr('has_research') | list | length == profiles | length }}"><span class="stage-name">Evidence gathering</span><span class="stage-state">{{ profiles | selectattr("has_research") | list | length }}/{{ profiles | length }} candidates researched</span></li>
     <li class="stage"><span class="stage-name">Assessment</span><span class="stage-state">Not connected yet</span></li>
 </ol>
 
@@ -71,15 +71,29 @@
             {{ ui.empty_state("Buyer research has not yet been run.") }}
         {% endif %}
         <dl class="fields">
-            {{ ui.fact_field(buyer, "revenue", "Revenue", "Not researched yet") }}
-            {{ ui.fact_field(buyer, "employee_count", "Employees", "Not researched yet") }}
-            {{ ui.fact_field(buyer, "market_cap", "Market cap", "Not researched yet") }}
+            {{ ui.fact_field(buyer, "revenue", "Revenue") }}
+            {{ ui.fact_field(buyer, "market_cap", "Market cap") }}
+            {{ ui.fact_field(buyer, "employee_count", "Employees") }}
+            {{ ui.fact_field(buyer, "ownership_status", "Public / private") }}
         </dl>
         <div class="stat-row">
-            <div class="stat"><span class="stat-num">{{ buyer.all("strategic_priority") | length }}</span><span class="stat-label">Strategic priorities</span></div>
-            <div class="stat"><span class="stat-num">{{ buyer.events_of("acquisition") | length }}</span><span class="stat-label">Acquisitions</span></div>
-            <div class="stat"><span class="stat-num">{{ buyer.sources | length }}</span><span class="stat-label">Sources</span></div>
+            <div class="stat"><span class="stat-num">{{ buyer.all("product", "capability") | length }}</span><span class="stat-label">Products &amp; capabilities</span></div>
+            <div class="stat"><span class="stat-num">{{ buyer.documents | length }}</span><span class="stat-label">Filings</span></div>
+            <div class="stat"><span class="stat-num">{{ buyer.source_rows | length }}</span><span class="stat-label">Sources</span></div>
         </div>
+        <form method="post" action="{{ url_for('run_research', company_id=buyer.company.id) }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button class="btn" type="submit" data-busy="Researching buyer…">{{ "Re-run buyer research" if buyer.runs else "Research buyer" }}</button>
+        </form>
+        <p class="hint">For a UK buyer, add its company number on the buyer profile; for a listed buyer, a ticker helps.</p>
     </aside>
 </div>
+<script>
+    document.querySelectorAll("button[data-busy]").forEach(function (btn) {
+        btn.form.addEventListener("submit", function () {
+            btn.disabled = true;
+            btn.textContent = btn.dataset.busy;
+        });
+    });
+</script>
 {% endblock %}

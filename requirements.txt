@@ -1,3 +1,9 @@
 flask
 psycopg2-binary
 python-dotenv
+requests
+beautifulsoup4
+lxml
+yfinance
+pypdf
+anthropic

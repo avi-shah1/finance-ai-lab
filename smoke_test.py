@@ -5,9 +5,15 @@ is ever saved.
 Usage:  python smoke_test.py
 """
 
+import os
 import re
 
 import database
+
+# Keep the research check offline: without keys, Companies House and SEC stop
+# at "credentials required" before making any request.
+os.environ.pop("COMPANIES_HOUSE_API_KEY", None)
+os.environ.pop("SEC_USER_AGENT", None)
 
 _real_conn = database.get_connection()
 
@@ -132,7 +138,29 @@ try:
     r = client.get(f"/buyers/{buyer_id}")
     body = text(r)
     check("buyer profile page loads with empty states",
-          r.status_code == 200 and "Research has not yet been run" in body)
+          r.status_code == 200 and "Not researched" in body and "Run research" in body)
+
+    r = client.post(f"/companies/{target_id}/identifiers", data={
+        "next": company_url, "companies_house": "12AB", "website": "example.com", "hq_country": "UK",
+    }, follow_redirects=True)
+    check("invalid company number rejected", "8 characters" in text(r))
+
+    r = client.post(f"/companies/{target_id}/identifiers", data={
+        "next": company_url, "companies_house": "1234567", "website": "", "hq_country": "UK",
+        "sector": "Health tech",
+    }, follow_redirects=True)
+    check("identifiers saved (number zero-padded)", "01234567" in text(r))
+
+    r = client.post(f"/companies/{target_id}/research", data={"next": company_url}, follow_redirects=True)
+    body = text(r)
+    check("research runs without crashing", "Research finished" in body)
+    check("missing API key shown as a status, not an error page",
+          "API credentials required" in body and "COMPANIES_HOUSE_API_KEY" in body)
+    check("inapplicable providers explained", "Not applicable" in body)
+    check("financials show a researched-but-empty state", "No reported financials yet" in body)
+
+    r = client.post(f"/companies/{target_id}/ai-extract", data={"next": company_url}, follow_redirects=True)
+    check("AI extraction with nothing retrieved explains itself", "Nothing to extract yet" in text(r))
 
     r = client.post(f"/searches/{search_id}/candidates/{target_id}/remove", follow_redirects=True)
     check("candidate removed", "Smoke Target Ltd" not in text(r).split("Add from company library")[0])

@@ -76,14 +76,14 @@ def get_fact_types():
 #   event  = {"event_type", "title", "evidence_type", and optionally
 #             "summary", "event_date"}
 
-def _insert_source(cur, source):
+def _insert_source(cur, company_id, source):
     cur.execute(
         """
-        INSERT INTO sources (source_type, name, url, title, published_on)
-        VALUES (%(source_type)s, %(name)s, %(url)s, %(title)s, %(published_on)s)
+        INSERT INTO sources (company_id, provider, source_type, name, url, title, published_on)
+        VALUES (%(company_id)s, 'manual', %(source_type)s, %(name)s, %(url)s, %(title)s, %(published_on)s)
         RETURNING id;
         """,
-        source,
+        {**source, "company_id": company_id},
     )
     return cur.fetchone()["id"]
 
@@ -92,9 +92,11 @@ def _insert_fact(cur, company_id, source_id, fact):
     cur.execute(
         """
         INSERT INTO facts (company_id, fact_type, value_text, value_number, currency,
-                           period, as_of, source_id, evidence_type, excerpt)
+                           period, as_of, source_id, evidence_type, excerpt,
+                           extracted_by, extraction_method)
         VALUES (%(company_id)s, %(fact_type)s, %(value_text)s, %(value_number)s, %(currency)s,
-                %(period)s, %(as_of)s, %(source_id)s, %(evidence_type)s, %(excerpt)s);
+                %(period)s, %(as_of)s, %(source_id)s, %(evidence_type)s, %(excerpt)s,
+                'manual', 'manual');
         """,
         {"value_number": None, "currency": None, "period": None, "as_of": None, "excerpt": None,
          **fact, "company_id": company_id, "source_id": source_id},
@@ -104,14 +106,14 @@ def _insert_fact(cur, company_id, source_id, fact):
 def record_facts(company_id, source, facts):
     """Save one source and the facts it supports."""
     with cursor() as cur:
-        source_id = _insert_source(cur, source)
+        source_id = _insert_source(cur, company_id, source)
         for fact in facts:
             _insert_fact(cur, company_id, source_id, fact)
 
 
 def record_event(company_id, source, event):
     with cursor() as cur:
-        source_id = _insert_source(cur, source)
+        source_id = _insert_source(cur, company_id, source)
         cur.execute(
             """
             INSERT INTO events (company_id, event_type, title, summary, event_date,
@@ -139,7 +141,7 @@ def create_company(name, website=None, hq_country=None, sector=None,
         )
         company_id = cur.fetchone()["id"]
         if facts:
-            source_id = _insert_source(cur, source)
+            source_id = _insert_source(cur, company_id, source)
             for fact in facts:
                 _insert_fact(cur, company_id, source_id, fact)
         if search_id is not None:
@@ -155,7 +157,7 @@ def create_company(name, website=None, hq_country=None, sector=None,
 _SOURCE_COLUMNS = """
     s.id AS source_id, s.source_type, s.name AS source_name, s.title AS source_title,
     s.url AS source_url, s.published_on AS source_published_on,
-    s.retrieved_at AS source_retrieved_at
+    s.retrieved_at AS source_retrieved_at, s.provider, s.document_type AS source_document_type
 """
 
 
@@ -172,7 +174,7 @@ def get_facts_for(company_ids):
             JOIN fact_types ft ON ft.code = f.fact_type
             JOIN sources s ON s.id = f.source_id
             WHERE f.company_id = ANY(%s)
-            ORDER BY ft.sort_order, f.as_of DESC NULLS LAST, f.created_at DESC;
+            ORDER BY ft.sort_order, coalesce(f.period_end, f.as_of) DESC NULLS LAST, f.created_at DESC;
             """,
             (list(company_ids),),
         )
@@ -202,6 +204,89 @@ def get_events_for(company_ids):
     grouped = defaultdict(list)
     for row in rows:
         grouped[row["company_id"]].append(row)
+    return grouped
+
+
+def get_sources(company_id):
+    """Every source recorded for a company, newest first, with the fact
+    types each one supports (for the Sources / Evidence register)."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT s.*,
+                   coalesce(array_agg(DISTINCT ft.label) FILTER (WHERE ft.label IS NOT NULL), '{}') AS supports,
+                   coalesce(array_agg(DISTINCT f.fact_type) FILTER (WHERE f.extracted_by IN ('ai_documents', 'ai_website')), '{}') AS ai_fact_types,
+                   count(f.id) AS fact_count,
+                   count(f.id) FILTER (WHERE f.extracted_by IN ('ai_documents', 'ai_website')) AS ai_fact_count
+            FROM sources s
+            LEFT JOIN facts f ON f.source_id = s.id
+            LEFT JOIN fact_types ft ON ft.code = f.fact_type
+            WHERE s.company_id = %s
+            GROUP BY s.id
+            ORDER BY s.document_type IS NULL, s.period_end DESC NULLS LAST,
+                     s.published_on DESC NULLS LAST, s.retrieved_at DESC;
+            """,
+            (company_id,),
+        )
+        return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Identifiers and research runs
+# ---------------------------------------------------------------------------
+
+def get_identifiers(company_id, detailed=False):
+    """{scheme: value}, or {scheme: row} when detailed=True."""
+    with cursor() as cur:
+        cur.execute("SELECT * FROM company_identifiers WHERE company_id = %s;", (company_id,))
+        rows = cur.fetchall()
+    return {r["scheme"]: (r if detailed else r["value"]) for r in rows}
+
+
+def set_identifier(company_id, scheme, value):
+    """Record an analyst-entered identifier; an empty value removes it."""
+    with cursor() as cur:
+        if value:
+            cur.execute(
+                """
+                INSERT INTO company_identifiers (company_id, scheme, value, match_method)
+                VALUES (%s, %s, %s, 'analyst_entered')
+                ON CONFLICT (company_id, scheme) DO UPDATE
+                    SET value = EXCLUDED.value, match_method = 'analyst_entered';
+                """,
+                (company_id, scheme, value),
+            )
+        else:
+            cur.execute("DELETE FROM company_identifiers WHERE company_id = %s AND scheme = %s;",
+                        (company_id, scheme))
+
+
+def update_company_identity(company_id, website, hq_country, sector):
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE companies SET website = %s, hq_country = %s, sector = %s WHERE id = %s;",
+            (website, hq_country, sector, company_id),
+        )
+
+
+def get_latest_runs(company_ids):
+    """{company_id: {provider: latest research_runs row}}."""
+    if not company_ids:
+        return {}
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (company_id, provider) *
+            FROM research_runs
+            WHERE company_id = ANY(%s) AND status <> 'running'
+            ORDER BY company_id, provider, started_at DESC;
+            """,
+            (list(company_ids),),
+        )
+        rows = cur.fetchall()
+    grouped = defaultdict(dict)
+    for row in rows:
+        grouped[row["company_id"]][row["provider"]] = row
     return grouped
 
 

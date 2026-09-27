@@ -7,6 +7,7 @@ from flask import Flask, abort, flash, redirect, render_template, request, url_f
 
 import database
 import screening
+from enrichment.runner import AI_LABELS, PROVIDER_LABELS, STRUCTURED_LABELS, enrich_company
 from profiles import CompanyProfile, build_profiles
 
 app = Flask(__name__)
@@ -22,7 +23,8 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(24)
 @app.context_processor
 def inject_vocabulary():
     """Make the screening vocabulary available in every template."""
-    return {"vocab": screening}
+    return {"vocab": screening, "provider_labels": PROVIDER_LABELS,
+            "structured_labels": STRUCTURED_LABELS, "ai_labels": AI_LABELS}
 
 
 @app.template_filter("external_url")
@@ -43,6 +45,11 @@ def external_url(value):
 @app.template_filter("fmt_date")
 def fmt_date(value):
     return value.strftime("%d %b %Y") if value else ""
+
+
+@app.template_filter("fmt_datetime")
+def fmt_datetime(value):
+    return value.astimezone().strftime("%d %b %Y, %H:%M") if value else ""
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +133,8 @@ def form_error_redirect(error, target):
 def home():
     companies = database.get_all_companies()
     ids = [c["id"] for c in companies]
-    profiles = build_profiles(companies, database.get_facts_for(ids), database.get_events_for(ids))
+    profiles = build_profiles(companies, database.get_facts_for(ids), database.get_events_for(ids),
+                              database.get_latest_runs(ids))
     return render_template(
         "index.html",
         profiles=profiles,
@@ -152,14 +160,11 @@ def show_search(search_id):
     search = database.get_search(search_id) or abort(404)
     candidates = database.get_candidates(search_id)
     ids = [c["id"] for c in candidates]
-    profiles = build_profiles(candidates, database.get_facts_for(ids), database.get_events_for(ids))
+    profiles = build_profiles(candidates, database.get_facts_for(ids), database.get_events_for(ids),
+                              database.get_latest_runs(ids))
 
     buyer_id = search["buyer_company_id"]
-    buyer = CompanyProfile(
-        database.get_company(buyer_id),
-        database.get_facts_for([buyer_id]).get(buyer_id, []),
-        database.get_events_for([buyer_id]).get(buyer_id, []),
-    )
+    buyer = _load_profile(buyer_id)
 
     # Companies that could still be added: not the buyer, not already listed.
     excluded = set(ids) | {buyer_id}
@@ -239,6 +244,9 @@ def _load_profile(company_id):
         company,
         database.get_facts_for([company_id]).get(company_id, []),
         database.get_events_for([company_id]).get(company_id, []),
+        runs=database.get_latest_runs([company_id]).get(company_id, {}),
+        sources=database.get_sources(company_id),
+        identifiers=database.get_identifiers(company_id, detailed=True),
     )
 
 
@@ -330,6 +338,75 @@ def add_event(company_id):
 
     database.record_event(company_id, source, event)
     flash("Event recorded.", "info")
+    return redirect(back)
+
+
+# ---------------------------------------------------------------------------
+# Enrichment
+# ---------------------------------------------------------------------------
+
+@app.route("/companies/<int:company_id>/identifiers", methods=["POST"])
+def update_identifiers(company_id):
+    """Identity details that tell the providers exactly which company to
+    research. Entered values are trusted over automatic name matches."""
+    back = _next_url(url_for("show_company", company_id=company_id))
+    database.get_company(company_id) or abort(404)
+
+    number = (_text("companies_house") or "").upper().replace(" ", "")
+    if number and not re.fullmatch(r"[A-Z0-9]{8}|\d{1,8}", number):
+        return form_error_redirect("Companies House numbers are 8 characters, e.g. 01234567 or SC123456.", back)
+    if number.isdigit():
+        number = number.zfill(8)
+    cik = (_text("sec_cik") or "").lstrip("0")
+    if cik and not cik.isdigit():
+        return form_error_redirect("An SEC CIK is a number, e.g. 1108524.", back)
+    ticker = (_text("ticker") or "").upper()
+    if ticker and not re.fullmatch(r"[A-Z0-9.\-]{1,12}", ticker):
+        return form_error_redirect("That doesn't look like a stock ticker (e.g. CRM or VOD.L).", back)
+    website = _text("website")
+    if website and external_url(website) is None:
+        return form_error_redirect("Website should look like example.com or https://example.com.", back)
+
+    database.update_company_identity(company_id, website, _text("hq_country"), _text("sector"))
+    database.set_identifier(company_id, "companies_house", number)
+    database.set_identifier(company_id, "sec_cik", cik)
+    database.set_identifier(company_id, "ticker", ticker)
+    flash("Identity details saved. Run research to fetch sources.", "info")
+    return redirect(back)
+
+
+@app.route("/companies/<int:company_id>/research", methods=["POST"])
+def run_research(company_id):
+    """Fetch evidence from every applicable source. Runs in the request, so
+    it takes a little while (usually 5–40 seconds)."""
+    back = _next_url(url_for("show_company", company_id=company_id))
+    database.get_company(company_id) or abort(404)
+    summaries = enrich_company(company_id)
+    stored = sum(s["facts"] for s in summaries)
+    ran = [s for s in summaries if s["status"] != "not_applicable"]
+    problems = [f"{s['label']}: {screening.RUN_STATUSES[s['status']][0]}" for s in ran
+                if s["status"] not in ("success", "partial")]
+    flash(f"Research finished: {stored} facts stored from {len(ran)} provider(s)."
+          + (f" Issues: {'; '.join(problems)}." if problems else ""), "info" if not problems else "error")
+    return redirect(back)
+
+
+@app.route("/companies/<int:company_id>/ai-extract", methods=["POST"])
+def run_ai_extraction(company_id):
+    """Ask Claude to extract facts from documents and pages already
+    retrieved for this company. Separate from research because each call
+    costs money; unchanged documents are skipped automatically."""
+    back = _next_url(url_for("show_company", company_id=company_id))
+    database.get_company(company_id) or abort(404)
+    summaries = enrich_company(company_id, group="ai")
+    stored = sum(s["facts"] for s in summaries)
+    ran = [s for s in summaries if s["status"] != "not_applicable"]
+    problems = [f"{s['label']}: {s['message']}" for s in ran if s["status"] not in ("success", "partial")]
+    if not ran:
+        flash("Nothing to extract yet: run research first to retrieve PDFs and web pages.", "error")
+    else:
+        flash(f"AI extraction finished: {stored} verified facts stored."
+              + (f" Issues: {'; '.join(problems)}" if problems else ""), "error" if problems else "info")
     return redirect(back)
 
 

@@ -14,7 +14,10 @@
         <div class="criteria">
             {% set href = c.website | external_url %}
             {% if href %}<a class="criterion" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ c.website }} ↗</a>{% endif %}
-            <a class="criterion" href="{{ url_for('show_company', company_id=c.id) }}#record">Record evidence →</a>
+            {% for scheme, row in profile.identifiers.items() %}
+                <span class="criterion" title="{{ vocab.MATCH_METHODS[row.match_method] }}"><span class="muted">{{ vocab.IDENTIFIER_SCHEMES[scheme] }}</span> {{ row.value }}</span>
+            {% endfor %}
+            <a class="criterion" href="{{ url_for('show_company', company_id=c.id) }}">Full company record →</a>
         </div>
     </div>
     <div class="head-side">
@@ -27,60 +30,93 @@
     </div>
 </header>
 
-{% if not profile.has_research %}
-    <p class="notice">Buyer research has not yet been run. Each section below will fill in once sources are gathered.</p>
-{% endif %}
+<p class="notice">This profile is factual only. Capability gaps, strategic fit and acquisition rationale are not assessed yet.</p>
+
+{{ ui.evidence_legend() }}
+{{ ui.research_panel(profile, request.full_path) }}
 
 <div class="card-grid">
     <section class="panel">
-        <h2>Overview</h2>
+        <h2>Company overview</h2>
         {% set d = profile.fact("description") %}
-        {% if d %}<p class="lede">{{ d.value_text }}</p>{{ ui.source_ref(d) }}{% else %}{{ ui.empty_state() }}{% endif %}
+        {% if d %}<p class="lede">{{ d.value_text }}</p>{{ ui.source_ref(d) }}{% else %}{{ ui.empty_state("No description: " ~ profile.unknown_reason("description") | lower ~ ".") }}{% endif %}
         <dl class="fields">
-            {{ ui.fact_field(profile, "headquarters", "Headquarters", "Not researched yet") }}
-            {{ ui.fact_field(profile, "ownership_status", "Ownership", "Not researched yet") }}
-            {{ ui.fact_field(profile, "stock_ticker", "Ticker", "Not researched yet") }}
+            {{ ui.fact_field(profile, "legal_name", "Legal name") }}
+            {{ ui.fact_field(profile, "headquarters", "Headquarters") }}
+            {{ ui.fact_field(profile, "ownership_status", "Public / private") }}
+            {{ ui.fact_field(profile, "exchange", "Exchange") }}
+            {{ ui.fact_field(profile, "stock_ticker", "Ticker") }}
         </dl>
     </section>
 
     <section class="panel">
         <h2>Financial scale</h2>
         <dl class="fields">
-            {{ ui.fact_field(profile, "revenue", "Revenue", "Not researched yet") }}
-            {{ ui.fact_field(profile, "revenue_growth", "Revenue growth", "Not researched yet") }}
-            {{ ui.fact_field(profile, "market_cap", "Market cap", "Not researched yet") }}
-            {{ ui.fact_field(profile, "employee_count", "Employees", "Not researched yet") }}
+            {{ ui.fact_field(profile, "revenue", "Revenue (latest)") }}
+            {{ ui.fact_field(profile, "operating_profit", "Operating profit (latest)") }}
+            {{ ui.fact_field(profile, "market_cap", "Market cap") }}
+            {{ ui.fact_field(profile, "employee_count", "Employees") }}
+            {{ ui.fact_field(profile, "cash", "Cash") }}
         </dl>
+    </section>
+
+    <section class="panel span-full">
+        <h2>Recent reported financials</h2>
+        {{ ui.financial_table(profile) }}
     </section>
 
     <section class="panel">
         <h2>Products / capabilities</h2>
-        {{ ui.fact_list(profile.all("product", "capability"), show_label=true) }}
+        <h3 class="subhead">Products</h3>
+        {{ ui.fact_chips(profile.all("product"), "None found on the company website." if profile.runs else "Not researched yet.") }}
+        <h3 class="subhead">Solutions / capabilities</h3>
+        {{ ui.fact_chips(profile.all("capability", "integration"), "None found." if profile.runs else "Not researched yet.") }}
     </section>
 
     <section class="panel">
-        <h2>Customer positioning</h2>
-        {{ ui.fact_list(profile.all("customer_segment", "notable_customer", "geography_presence"), show_label=true) }}
+        <h2>Industries, customers &amp; geographies</h2>
+        <h3 class="subhead">Industries served</h3>
+        {{ ui.fact_chips(profile.all("industry_served"), "None found." if profile.runs else "Not researched yet.") }}
+        <h3 class="subhead">Customer segments &amp; named customers</h3>
+        {{ ui.fact_chips(profile.all("customer_segment", "notable_customer"), "None found." if profile.runs else "Not researched yet.") }}
+        <h3 class="subhead">Geographies</h3>
+        {{ ui.fact_chips(profile.all("geography_presence"), "None found." if profile.runs else "Not researched yet.") }}
+        <h3 class="subhead">Industry classification</h3>
+        {{ ui.fact_chips(profile.all("sic_code"), "None found." if profile.runs else "Not researched yet.") }}
     </section>
 
     <section class="panel">
         <h2>Strategic priorities</h2>
-        {{ ui.fact_list(profile.all("strategic_priority")) }}
+        {{ ui.fact_list(profile.all("strategic_priority"), "Not researched yet: requires reading annual reports (a later phase).") }}
     </section>
 
     <section class="panel">
         <h2>Recent acquisitions</h2>
-        {{ ui.event_list(profile.events_of("acquisition")) }}
+        {{ ui.event_list(profile.events_of("acquisition"), "Not researched yet: news and deal sources aren't connected.") }}
+    </section>
+
+    <section class="panel span-full">
+        <h2>Company filings &amp; annual reports</h2>
+        {{ ui.documents_table(profile) }}
     </section>
 
     <section class="panel span-full">
         <h2>Recent developments</h2>
-        {{ ui.event_list(profile.events_except("acquisition")) }}
+        {{ ui.event_list(profile.events_except("acquisition"), "Not researched yet: news sources aren't connected.") }}
     </section>
 
-    <section class="panel span-full">
-        <h2>Sources</h2>
-        {{ ui.sources_table(profile.sources) }}
+    <section class="panel span-full" id="sources">
+        <h2>Sources &amp; evidence</h2>
+        {{ ui.sources_register(profile) }}
     </section>
 </div>
+
+<script>
+    document.querySelectorAll("button[data-busy]").forEach(function (btn) {
+        btn.form.addEventListener("submit", function () {
+            btn.disabled = true;
+            btn.textContent = btn.dataset.busy;
+        });
+    });
+</script>
 {% endblock %}
