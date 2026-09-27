@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% import "_components.html" as ui with context %}
+
+{% block title %}{{ profile.company.name }}{% endblock %}
+
+{% block content %}
+{% set c = profile.company %}
+<nav class="crumbs">
+    {% if search %}
+        <a href="{{ url_for('show_search', search_id=search.id) }}">{{ search.buyer_name }} · {{ search.target_sector }}</a> / {{ c.name }}
+    {% else %}
+        <a href="{{ url_for('home') }}#library">Company library</a> / {{ c.name }}
+    {% endif %}
+</nav>
+
+<header class="page-head">
+    <div>
+        <p class="eyebrow">{{ "Target company" if search else "Company" }}</p>
+        <h1>{{ c.name }}</h1>
+        <div class="criteria">
+            {% set href = c.website | external_url %}
+            {% if href %}<a class="criterion" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ c.website }} ↗</a>{% endif %}
+            <span class="criterion"><span class="muted">HQ</span> {{ c.hq_country or "Unknown" }}</span>
+            <span class="criterion"><span class="muted">Sector</span> {{ c.sector or "Unknown" }}</span>
+        </div>
+    </div>
+    <div class="head-side">
+        {% if search %}
+            <div class="screening-view">
+                <span class="muted small">Screening view vs {{ search.buyer_name }}</span>
+                {{ ui.rating_chip(assessments.get(("overall", None)), overall=true) }}
+            </div>
+        {% endif %}
+        {{ ui.coverage_meter(profile.coverage) }}
+    </div>
+</header>
+
+<div class="layout-detail">
+    <nav class="section-nav" aria-label="Sections">
+        <a href="#overview">Overview</a>
+        {% for d in vocab.DIMENSIONS %}<a href="#{{ d.code }}">{{ d.label }}</a>{% endfor %}
+        <a href="#financials">Financials</a>
+        <a href="#developments">Recent developments</a>
+        <a href="#hiring">Hiring</a>
+        <a href="#technology">Technology / patents</a>
+        <a href="#sources">Sources</a>
+        <a href="#record">Record evidence</a>
+    </nav>
+
+    <div class="sections">
+        <section class="panel" id="overview">
+            <h2>Overview</h2>
+            {% set d = profile.fact("description") %}
+            {% if d %}
+                <p class="lede">{{ d.value_text }}</p>
+                {{ ui.source_ref(d) }}
+            {% else %}
+                {{ ui.empty_state("No description researched yet.") }}
+            {% endif %}
+            <dl class="fields fields-grid">
+                {{ ui.fact_field(profile, "legal_name", "Legal name") }}
+                {{ ui.fact_field(profile, "legal_status", "Legal status") }}
+                {{ ui.fact_field(profile, "registration_number", "Registration no.") }}
+                {{ ui.fact_field(profile, "founded_year", "Founded") }}
+                {{ ui.fact_field(profile, "headquarters", "Headquarters") }}
+                {{ ui.fact_field(profile, "ownership_status", "Ownership") }}
+                {{ ui.fact_field(profile, "employee_count", "Employees") }}
+                {{ ui.fact_field(profile, "revenue", "Revenue") }}
+                {{ ui.fact_field(profile, "total_funding", "Total funding") }}
+            </dl>
+        </section>
+
+        {% for d in vocab.DIMENSIONS %}
+            <section class="panel dimension" id="{{ d.code }}">
+                <div class="panel-head">
+                    <h2>{{ d.label }}</h2>
+                    {% if search %}{{ ui.rating_chip(assessments.get((d.code, None))) }}{% endif %}
+                </div>
+                {% if not search %}
+                    <p class="notice">Assessments are made against a specific buyer. Open this company from a search to see them.</p>
+                {% endif %}
+                <ul class="criteria-list">
+                    {% for code, label in d.criteria.items() %}
+                        {% set a = assessments.get((d.code, code)) %}
+                        <li>
+                            <span>{{ label }}</span>
+                            {% if search %}{{ ui.rating_chip(a) }}{% else %}<span class="muted small">Buyer-specific</span>{% endif %}
+                            {% if a and a.rationale %}<p class="rationale">{{ a.rationale }}</p>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+                <h3 class="subhead">Relevant evidence on file</h3>
+                {% set facts = profile.all(*d.fact_types) %}
+                {% set events = profile.events_of(*d.event_types) %}
+                {% if facts or events %}
+                    {% if facts %}{{ ui.fact_list(facts, show_label=true) }}{% endif %}
+                    {% if events %}{{ ui.event_list(events) }}{% endif %}
+                {% else %}
+                    {{ ui.empty_state("Not researched yet.") }}
+                {% endif %}
+            </section>
+        {% endfor %}
+
+        <section class="panel" id="financials">
+            <h2>Financials</h2>
+            {{ ui.fact_list(profile.all("revenue", "revenue_growth", "ebitda", "market_cap", "total_funding", "last_funding_round"),
+                            "No financial information researched yet.", show_label=true) }}
+        </section>
+
+        <section class="panel" id="developments">
+            <h2>Recent developments</h2>
+            {{ ui.event_list(profile.events_except("hiring"), "No developments researched yet.") }}
+        </section>
+
+        <section class="panel" id="hiring">
+            <h2>Hiring</h2>
+            {% set hiring_facts = profile.all("employee_count", "open_roles") %}
+            {% set hiring_events = profile.events_of("hiring") %}
+            {% if hiring_facts or hiring_events %}
+                {% if hiring_facts %}{{ ui.fact_list(hiring_facts, show_label=true) }}{% endif %}
+                {% if hiring_events %}{{ ui.event_list(hiring_events) }}{% endif %}
+            {% else %}
+                {{ ui.empty_state("No hiring signals researched yet.") }}
+            {% endif %}
+        </section>
+
+        <section class="panel" id="technology">
+            <h2>Technology / patents</h2>
+            {{ ui.fact_list(profile.all("patent_count", "technology", "product", "capability"),
+                            "No technology or patent information researched yet.", show_label=true) }}
+        </section>
+
+        <section class="panel" id="sources">
+            <h2>Sources</h2>
+            {{ ui.sources_table(profile.sources) }}
+        </section>
+
+        <section class="panel" id="record">
+            <h2>Record evidence</h2>
+            <p class="muted">Add a fact or event you've found, with its source. It will appear in the relevant sections above.</p>
+            {{ ui.record_evidence(profile, fact_types, request.full_path) }}
+        </section>
+    </div>
+</div>
+{% endblock %}

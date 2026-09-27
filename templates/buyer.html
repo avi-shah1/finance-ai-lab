@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "_components.html" as ui with context %}
+
+{% block title %}{{ profile.company.name }} · Buyer profile{% endblock %}
+
+{% block content %}
+{% set c = profile.company %}
+<nav class="crumbs"><a href="{{ url_for('home') }}#searches">Searches</a> / {{ c.name }}</nav>
+
+<header class="page-head">
+    <div>
+        <p class="eyebrow">Buyer profile</p>
+        <h1>{{ c.name }}</h1>
+        <div class="criteria">
+            {% set href = c.website | external_url %}
+            {% if href %}<a class="criterion" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ c.website }} ↗</a>{% endif %}
+            <a class="criterion" href="{{ url_for('show_company', company_id=c.id) }}#record">Record evidence →</a>
+        </div>
+    </div>
+    <div class="head-side">
+        {% if searches %}
+            <div class="muted small">Used in {{ searches | length }} search{{ "es" if searches | length != 1 }}:</div>
+            {% for s in searches %}
+                <a class="small" href="{{ url_for('show_search', search_id=s.id) }}">{{ s.target_sector }} · {{ s.geography }}</a>
+            {% endfor %}
+        {% endif %}
+    </div>
+</header>
+
+{% if not profile.has_research %}
+    <p class="notice">Buyer research has not yet been run. Each section below will fill in once sources are gathered.</p>
+{% endif %}
+
+<div class="card-grid">
+    <section class="panel">
+        <h2>Overview</h2>
+        {% set d = profile.fact("description") %}
+        {% if d %}<p class="lede">{{ d.value_text }}</p>{{ ui.source_ref(d) }}{% else %}{{ ui.empty_state() }}{% endif %}
+        <dl class="fields">
+            {{ ui.fact_field(profile, "headquarters", "Headquarters", "Not researched yet") }}
+            {{ ui.fact_field(profile, "ownership_status", "Ownership", "Not researched yet") }}
+            {{ ui.fact_field(profile, "stock_ticker", "Ticker", "Not researched yet") }}
+        </dl>
+    </section>
+
+    <section class="panel">
+        <h2>Financial scale</h2>
+        <dl class="fields">
+            {{ ui.fact_field(profile, "revenue", "Revenue", "Not researched yet") }}
+            {{ ui.fact_field(profile, "revenue_growth", "Revenue growth", "Not researched yet") }}
+            {{ ui.fact_field(profile, "market_cap", "Market cap", "Not researched yet") }}
+            {{ ui.fact_field(profile, "employee_count", "Employees", "Not researched yet") }}
+        </dl>
+    </section>
+
+    <section class="panel">
+        <h2>Products / capabilities</h2>
+        {{ ui.fact_list(profile.all("product", "capability"), show_label=true) }}
+    </section>
+
+    <section class="panel">
+        <h2>Customer positioning</h2>
+        {{ ui.fact_list(profile.all("customer_segment", "notable_customer", "geography_presence"), show_label=true) }}
+    </section>
+
+    <section class="panel">
+        <h2>Strategic priorities</h2>
+        {{ ui.fact_list(profile.all("strategic_priority")) }}
+    </section>
+
+    <section class="panel">
+        <h2>Recent acquisitions</h2>
+        {{ ui.event_list(profile.events_of("acquisition")) }}
+    </section>
+
+    <section class="panel span-full">
+        <h2>Recent developments</h2>
+        {{ ui.event_list(profile.events_except("acquisition")) }}
+    </section>
+
+    <section class="panel span-full">
+        <h2>Sources</h2>
+        {{ ui.sources_table(profile.sources) }}
+    </section>
+</div>
+{% endblock %}

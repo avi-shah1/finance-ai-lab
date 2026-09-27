@@ -1,0 +1,356 @@
+{#
+  Reusable pieces. Import in a page with:
+    {% import "_components.html" as ui with context %}
+
+  The evidence components expect a fact or event row from database.py,
+  which always carries the joined source columns (source_name, source_url,
+  source_type, source_published_on, source_retrieved_at, evidence_type).
+#}
+
+
+{# ---- Empty / unknown states ------------------------------------------- #}
+
+{% macro empty_state(message="Research has not yet been run for this section.") %}
+    <div class="empty"><span class="empty-dot" aria-hidden="true"></span>{{ message }}</div>
+{% endmacro %}
+
+{% macro unknown(text="Unknown") %}<span class="unknown">{{ text }}</span>{% endmacro %}
+
+
+{# ---- Evidence & sources ---------------------------------------------- #}
+
+{% macro evidence_badge(code) %}
+    <span class="ev ev-{{ code }}">{{ vocab.EVIDENCE_TYPES[code] }}</span>
+{% endmacro %}
+
+{# The clickable provenance chip shown next to every fact and event. #}
+{% macro source_ref(item) %}
+    {%- set href = item.source_url | external_url -%}
+    <span class="src" title="{{ vocab.SOURCE_TYPES[item.source_type] }} · retrieved {{ item.source_retrieved_at | fmt_date }}">
+        {{ evidence_badge(item.evidence_type) }}
+        {% if href %}
+            <a class="src-name" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ item.source_name }}<span aria-hidden="true"> ↗</span></a>
+        {% elif item.source_name != vocab.EVIDENCE_TYPES[item.evidence_type] %}
+            <span class="src-name">{{ item.source_name }}</span>
+        {% endif %}
+        {% if item.source_published_on %}<span class="src-date">{{ item.source_published_on | fmt_date }}</span>{% endif %}
+    </span>
+{% endmacro %}
+
+{# One labelled fact: current value plus its source, or "Unknown". #}
+{% macro fact_field(profile, code, label, empty="Unknown") %}
+    {% set f = profile.fact(code) %}
+    <div class="field">
+        <dt>{{ label }}</dt>
+        <dd>
+            {% if f %}
+                <span class="val">{{ f.value_text }}</span>
+                {% if f.period %}<span class="muted">{{ f.period }}</span>{% endif %}
+                {{ source_ref(f) }}
+                {% set n = profile.all(code) | length %}
+                {% if n > 1 %}<span class="muted small">+{{ n - 1 }} other value{{ "s" if n > 2 }}</span>{% endif %}
+            {% else %}
+                {{ unknown(empty) }}
+            {% endif %}
+        </dd>
+    </div>
+{% endmacro %}
+
+{# A list of facts (multi-valued types such as products), each sourced. #}
+{% macro fact_list(facts, empty="Research has not yet been run for this section.", show_label=false) %}
+    {% if facts %}
+        <ul class="evidence-list">
+            {% for f in facts %}
+                <li>
+                    <div class="evidence-main">
+                        {% if show_label %}<span class="muted">{{ f.label }}:</span>{% endif %}
+                        <span class="val">{{ f.value_text }}</span>
+                        {% if f.period %}<span class="muted">{{ f.period }}</span>{% endif %}
+                        {% if f.as_of %}<span class="muted">as of {{ f.as_of | fmt_date }}</span>{% endif %}
+                    </div>
+                    {% if f.excerpt %}<blockquote class="excerpt">“{{ f.excerpt }}”</blockquote>{% endif %}
+                    {{ source_ref(f) }}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        {{ empty_state(empty) }}
+    {% endif %}
+{% endmacro %}
+
+{% macro event_list(events, empty="Research has not yet been run for this section.") %}
+    {% if events %}
+        <ol class="timeline">
+            {% for e in events %}
+                <li>
+                    <div class="timeline-meta">
+                        <span class="tag">{{ vocab.EVENT_TYPES[e.event_type] }}</span>
+                        <span class="muted">{{ e.event_date | fmt_date if e.event_date else "Date unknown" }}</span>
+                    </div>
+                    <div class="timeline-title">{{ e.title }}</div>
+                    {% if e.summary %}<p class="timeline-summary">{{ e.summary }}</p>{% endif %}
+                    {{ source_ref(e) }}
+                </li>
+            {% endfor %}
+        </ol>
+    {% else %}
+        {{ empty_state(empty) }}
+    {% endif %}
+{% endmacro %}
+
+{# Full source register for a company. #}
+{% macro sources_table(sources) %}
+    {% if sources %}
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Source</th><th>Type</th><th>Title</th><th>Published</th><th>Retrieved</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for s in sources %}
+                        {% set href = s.source_url | external_url %}
+                        <tr>
+                            <td>{{ s.source_name }}</td>
+                            <td><span class="tag">{{ vocab.SOURCE_TYPES[s.source_type] }}</span></td>
+                            <td>{{ s.source_title or "" }}</td>
+                            <td class="num">{{ s.source_published_on | fmt_date or "—" }}</td>
+                            <td class="num">{{ s.source_retrieved_at | fmt_date }}</td>
+                            <td>{% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer">Open ↗</a>{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        {{ empty_state("No sources recorded yet.") }}
+    {% endif %}
+{% endmacro %}
+
+
+{# ---- Screening ----------------------------------------------------- #}
+
+{% macro rating_chip(assessment, overall=false) %}
+    {% if assessment %}
+        {% set labels = vocab.OVERALL_VIEWS if overall else vocab.DIMENSION_RATINGS %}
+        <span class="rating rating-{{ assessment.rating }}">{{ labels[assessment.rating] }}</span>
+    {% else %}
+        <span class="rating rating-none">Not assessed</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro coverage_meter(cov) %}
+    <div class="coverage" title="{{ cov.known }} of {{ cov.total }} core fields have a sourced value">
+        <div class="coverage-bar"><span style="width: {{ (100 * cov.known / cov.total) | round | int }}%"></span></div>
+        <span class="coverage-text">{{ cov.known }}/{{ cov.total }} · {{ cov.sources }} source{{ "" if cov.sources == 1 else "s" }}</span>
+    </div>
+{% endmacro %}
+
+{# Candidate/company table. On narrow screens CSS turns rows into cards. #}
+{% macro company_table(profiles, search=None, assessments=None) %}
+    <div class="table-wrap">
+        <table class="data-table company-table">
+            <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>Description</th>
+                    <th>Location</th>
+                    <th class="num">Employees</th>
+                    <th class="num">Revenue</th>
+                    <th>Ownership</th>
+                    <th>Latest significant event</th>
+                    {% if search %}<th>Screening view</th>{% endif %}
+                    <th>Evidence coverage</th>
+                    {% if search %}<th><span class="sr-only">Actions</span></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in profiles %}
+                    {% set c = p.company %}
+                    {% set link = url_for("show_company", company_id=c.id, search=search.id if search else None) %}
+                    <tr>
+                        <td data-label="Company">
+                            <a class="company-link" href="{{ link }}">{{ c.name }}</a>
+                            {% if c.sector %}<div class="muted small">{{ c.sector }}</div>{% endif %}
+                        </td>
+                        <td data-label="Description" class="desc">
+                            {% set d = p.fact("description") %}
+                            {{ d.value_text | truncate(110) if d else unknown("Not researched yet") }}
+                        </td>
+                        <td data-label="Location">{{ c.hq_country or unknown() }}</td>
+                        {% for code in ["employee_count", "revenue", "ownership_status"] %}
+                            {% set f = p.fact(code) %}
+                            <td data-label="{{ ['Employees', 'Revenue', 'Ownership'][loop.index0] }}" class="{{ 'num' if loop.index0 < 2 }}">
+                                {% if f %}{{ f.value_text }} <span class="ev-dot ev-{{ f.evidence_type }}" title="{{ vocab.EVIDENCE_TYPES[f.evidence_type] }} · {{ f.source_name }}"></span>{% else %}{{ unknown() }}{% endif %}
+                            </td>
+                        {% endfor %}
+                        <td data-label="Latest event">
+                            {% set e = p.latest_event %}
+                            {% if e %}
+                                <span class="tag">{{ vocab.EVENT_TYPES[e.event_type] }}</span> {{ e.title | truncate(60) }}
+                                {% if e.event_date %}<div class="muted small">{{ e.event_date | fmt_date }}</div>{% endif %}
+                            {% else %}{{ unknown("None recorded") }}{% endif %}
+                        </td>
+                        {% if search %}
+                            <td data-label="Screening view">{{ rating_chip(assessments.get(c.id, {}).get(("overall", None)), overall=true) }}</td>
+                        {% endif %}
+                        <td data-label="Evidence">{{ coverage_meter(p.coverage) }}</td>
+                        {% if search %}
+                            <td class="actions">
+                                <form method="post" action="{{ url_for('remove_candidate', search_id=search.id, company_id=c.id) }}">
+                                    <button class="btn-icon" type="submit" title="Remove from this search" aria-label="Remove {{ c.name }} from this search">✕</button>
+                                </form>
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endmacro %}
+
+
+{# ---- Forms ---------------------------------------------------------- #}
+
+{# Shared "where did this come from?" fields, read by app.read_source_form(). #}
+{% macro source_fields() %}
+    <fieldset class="source-fields">
+        <legend>Evidence source</legend>
+        <div class="grid-2">
+            <label>Source type
+                <select name="source_type">
+                    {% for code, label in vocab.SOURCE_TYPES.items() %}
+                        <option value="{{ code }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Evidence type
+                <select name="evidence_type">
+                    {% for code in vocab.MANUAL_EVIDENCE_TYPES %}
+                        <option value="{{ code }}">{{ vocab.EVIDENCE_TYPES[code] }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Source name
+                <input type="text" name="source_name" placeholder="e.g. Companies House">
+            </label>
+            <label>Source URL
+                <input type="url" name="source_url" placeholder="https://…">
+            </label>
+            <label>Document title
+                <input type="text" name="source_title" placeholder="Optional">
+            </label>
+            <label>Source date
+                <input type="date" name="source_published_on">
+            </label>
+        </div>
+        <p class="hint">“Verified” requires a URL. Leave source type as Manual entry for your own notes.</p>
+    </fieldset>
+{% endmacro %}
+
+{% macro company_form(search=None) %}
+    <form class="form" method="post" action="{{ url_for('add_company') }}">
+        {% if search %}<input type="hidden" name="search_id" value="{{ search.id }}">{% endif %}
+        <div class="grid-2">
+            <label>Company name *
+                <input type="text" name="name" required>
+            </label>
+            <label>Website
+                <input type="text" name="website" placeholder="example.com">
+            </label>
+            <label>HQ country
+                <input type="text" name="hq_country">
+            </label>
+            <label>Sector
+                <input type="text" name="sector">
+            </label>
+        </div>
+        <p class="hint">Optional facts: only fill in what you have evidence for. Blank fields stay Unknown.</p>
+        <div class="grid-2">
+            <label>Revenue
+                <input type="text" name="revenue" placeholder="e.g. £12m (FY2024)">
+            </label>
+            <label>Employee count
+                <input type="text" name="employee_count">
+            </label>
+            <label>Ownership
+                <input type="text" name="ownership_status" placeholder="e.g. Private, VC-backed">
+            </label>
+            <label class="span-2">Short description
+                <textarea name="description" rows="2"></textarea>
+            </label>
+        </div>
+        {{ source_fields() }}
+        <button class="btn btn-primary" type="submit">{{ "Add candidate" if search else "Add company" }}</button>
+    </form>
+{% endmacro %}
+
+{% macro record_evidence(profile, fact_types, next_url) %}
+    <div class="grid-2 record-grid">
+        <details class="panel-inset">
+            <summary>Record a fact</summary>
+            <form class="form" method="post" action="{{ url_for('add_fact', company_id=profile.company.id) }}">
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <div class="grid-2">
+                    <label>Fact
+                        <select name="fact_type" required>
+                            {% for category, items in fact_types | groupby("category") %}
+                                <optgroup label="{{ category | capitalize }}">
+                                    {% for ft in items | sort(attribute="sort_order") %}
+                                        <option value="{{ ft.code }}">{{ ft.label }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>Value (as stated in source) *
+                        <input type="text" name="value_text" required placeholder="e.g. £12.4m">
+                    </label>
+                    <label>Numeric value
+                        <input type="text" name="value_number" inputmode="decimal" placeholder="e.g. 12400000">
+                    </label>
+                    <label>Currency
+                        <input type="text" name="currency" maxlength="3" placeholder="GBP">
+                    </label>
+                    <label>Period
+                        <input type="text" name="period" placeholder="e.g. FY2024">
+                    </label>
+                    <label>As of
+                        <input type="date" name="as_of">
+                    </label>
+                    <label class="span-2">Supporting excerpt
+                        <textarea name="excerpt" rows="2" placeholder="Quote the passage that supports this value"></textarea>
+                    </label>
+                </div>
+                {{ source_fields() }}
+                <button class="btn btn-primary" type="submit">Save fact</button>
+            </form>
+        </details>
+
+        <details class="panel-inset">
+            <summary>Record an event</summary>
+            <form class="form" method="post" action="{{ url_for('add_event', company_id=profile.company.id) }}">
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <div class="grid-2">
+                    <label>Event type
+                        <select name="event_type">
+                            {% for code, label in vocab.EVENT_TYPES.items() %}
+                                <option value="{{ code }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>Event date
+                        <input type="date" name="event_date">
+                    </label>
+                    <label class="span-2">Title *
+                        <input type="text" name="title" required>
+                    </label>
+                    <label class="span-2">Summary
+                        <textarea name="summary" rows="2"></textarea>
+                    </label>
+                </div>
+                {{ source_fields() }}
+                <button class="btn btn-primary" type="submit">Save event</button>
+            </form>
+        </details>
+    </div>
+{% endmacro %}

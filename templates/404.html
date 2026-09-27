@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "_components.html" as ui with context %}
+
+{% block title %}Not found{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <h1>Not found</h1>
+    {{ ui.empty_state("That search or company doesn't exist.") }}
+    <p><a href="{{ url_for('home') }}">← Back to dashboard</a></p>
+</section>
+{% endblock %}

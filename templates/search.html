@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% import "_components.html" as ui with context %}
+
+{% block title %}{{ search.buyer_name }} · {{ search.target_sector }}{% endblock %}
+
+{% block content %}
+<nav class="crumbs"><a href="{{ url_for('home') }}">Searches</a> / Search #{{ search.id }}</nav>
+
+<header class="page-head">
+    <div>
+        <p class="eyebrow">Target screen</p>
+        <h1>{{ search.buyer_name }}</h1>
+        <div class="criteria">
+            <span class="criterion"><span class="muted">Sector</span> {{ search.target_sector }}</span>
+            <span class="criterion"><span class="muted">Geography</span> {{ search.geography }}</span>
+            <span class="criterion"><span class="muted">Created</span> {{ search.created_at | fmt_date }}</span>
+        </div>
+    </div>
+</header>
+
+<ol class="pipeline" aria-label="Research pipeline">
+    <li class="stage stage-done"><span class="stage-name">Search defined</span><span class="stage-state">Complete</span></li>
+    <li class="stage"><span class="stage-name">Buyer profile</span><span class="stage-state">Not connected yet</span></li>
+    <li class="stage"><span class="stage-name">Target discovery</span><span class="stage-state">Not connected yet · add manually</span></li>
+    <li class="stage"><span class="stage-name">Evidence gathering</span><span class="stage-state">Not connected yet</span></li>
+    <li class="stage"><span class="stage-name">Assessment</span><span class="stage-state">Not connected yet</span></li>
+</ol>
+
+<div class="layout-split">
+    <section class="panel">
+        <div class="panel-head">
+            <h2>Candidates</h2>
+            <span class="muted">{{ profiles | length }} in universe</span>
+        </div>
+        {% if profiles %}
+            {{ ui.company_table(profiles, search=search, assessments=assessments) }}
+        {% else %}
+            {{ ui.empty_state("No candidates yet. Automated discovery isn't connected, so add companies below.") }}
+        {% endif %}
+
+        <div class="grid-2 add-candidates">
+            <form class="panel-inset form" method="post" action="{{ url_for('add_candidate', search_id=search.id) }}">
+                <h3>Add from company library</h3>
+                {% if addable %}
+                    <label>Company
+                        <select name="company_id" required>
+                            {% for c in addable %}
+                                <option value="{{ c.id }}">{{ c.name }}{% if c.hq_country %} · {{ c.hq_country }}{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button class="btn" type="submit">Add to candidates</button>
+                {% else %}
+                    <p class="muted">Every company in the library is already listed.</p>
+                {% endif %}
+            </form>
+            <details class="panel-inset">
+                <summary>Add a new company</summary>
+                {{ ui.company_form(search=search) }}
+            </details>
+        </div>
+    </section>
+
+    <aside class="panel buyer-card">
+        <div class="panel-head">
+            <h2>Buyer profile</h2>
+            <a href="{{ url_for('show_buyer', company_id=buyer.company.id) }}">Open →</a>
+        </div>
+        <h3 class="buyer-name">{{ buyer.company.name }}</h3>
+        {% if not buyer.has_research %}
+            {{ ui.empty_state("Buyer research has not yet been run.") }}
+        {% endif %}
+        <dl class="fields">
+            {{ ui.fact_field(buyer, "revenue", "Revenue", "Not researched yet") }}
+            {{ ui.fact_field(buyer, "employee_count", "Employees", "Not researched yet") }}
+            {{ ui.fact_field(buyer, "market_cap", "Market cap", "Not researched yet") }}
+        </dl>
+        <div class="stat-row">
+            <div class="stat"><span class="stat-num">{{ buyer.all("strategic_priority") | length }}</span><span class="stat-label">Strategic priorities</span></div>
+            <div class="stat"><span class="stat-num">{{ buyer.events_of("acquisition") | length }}</span><span class="stat-label">Acquisitions</span></div>
+            <div class="stat"><span class="stat-num">{{ buyer.sources | length }}</span><span class="stat-label">Sources</span></div>
+        </div>
+    </aside>
+</div>
+{% endblock %}
