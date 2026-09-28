@@ -604,7 +604,7 @@
                 <tr>
                     <th>Company</th>
                     <th>What they do</th>
-                    <th>Based in</th>
+                    <th>Location</th>
                     <th>Size</th>
                     <th>Why it matched</th>
                     <th>Screening view</th>
@@ -623,7 +623,7 @@
                             <div class="muted small">{% if c.origin == "manual" %}Added manually{% else %}Found via {{ c.discovered_via | map("capitalize") | join(", ") }}{% endif %}</div>
                         </td>
                         <td data-label="What they do" class="desc what-cell">{{ what_they_do(p) }}</td>
-                        <td data-label="Based in">{{ fact_or_unknown(p, "headquarters") }}</td>
+                        <td data-label="Location">{{ fact_or_unknown(p, "headquarters") }}</td>
                         <td data-label="Size" class="size-cell">
                             {% set emp = p.fact("employee_count") %}
                             {% set rev = p.fact("revenue") %}
