@@ -36,9 +36,10 @@
 {% endmacro %}
 
 {# Link to a fact's source, opening a PDF at the cited page when known. #}
+{# Jumps to the quoted text on the page, or opens a PDF at the cited page;
+   empty when no page shows the evidence (see links.py). #}
 {% macro fact_href(item) -%}
-    {%- set href = item.source_url | external_url -%}
-    {%- if href and item.evidence_page %}{{ href }}#page={{ item.evidence_page }}{% elif href %}{{ href }}{% endif -%}
+    {{ item | evidence_href }}
 {%- endmacro %}
 
 {# For AI-extracted facts: which model, which page, and whether the quote was checked. #}
@@ -479,7 +480,7 @@
     <div class="size-line">
         <span class="ev-dot ev-{{ vocab.EVIDENCE_GROUPS[f.evidence_type] }}" aria-hidden="true"></span>{{ f.value_text }} {{ suffix }}
         <div class="size-src">
-            {% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer" title="{{ f.source_title or f.source_name }}{% if f.excerpt %}: “{{ f.excerpt }}”{% endif %}">{{ src }}</a>{% else %}<span title="{% if f.excerpt %}“{{ f.excerpt }}”{% endif %}">{{ src }}</span>{% endif %}
+            {% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer" title="{{ f.source_title or f.source_name }}{% if f.excerpt %}: “{{ f.excerpt }}”{% endif %}">{{ src }}</a>{% else %}<span class="off-site" title="{% if f is off_site %}From Exa's company profile (not on the company's website){% endif %}{% if f.excerpt %}: “{{ f.excerpt }}”{% endif %}">{{ src }}</span>{% endif %}
             {%- if f.period %}, {{ f.period }}{% endif %}
             {%- if f.evidence_type == "third_party_estimate" %} · estimate{% endif %}
         </div>

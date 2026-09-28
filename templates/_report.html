@@ -10,12 +10,12 @@
 {% macro fact_chip(f) %}
     {%- set href = ui.fact_href(f) | trim -%}
     <a class="cite ev-border-{{ vocab.EVIDENCE_GROUPS[f.evidence_type] }}"{% if href %} href="{{ href }}" target="_blank" rel="noopener noreferrer"{% endif %}
-       title="{% if f.company_id != profile.company.id %}Buyer ({{ f.company_name }}) · {% endif %}{{ f.label }}: {{ f.value_text }} · {{ vocab.EVIDENCE_TYPES[f.evidence_type] }} · {{ f.source_title or f.source_name }}{% if f.excerpt %} · “{{ f.excerpt }}”{% endif %}">
+       title="{% if f.company_id != profile.company.id %}Buyer ({{ f.company_name }}) · {% endif %}{{ f.label }}: {{ f.value_text }} · {% if f is off_site %}From Exa's company profile (not on the company's website){% else %}{{ vocab.EVIDENCE_TYPES[f.evidence_type] }} · {{ f.source_title or f.source_name }}{% endif %}{% if f.excerpt %} · “{{ f.excerpt }}”{% endif %}">
         {% if f.company_id != profile.company.id %}Buyer: {% endif %}{{ f.value_text | truncate(36) }}</a>
 {%- endmacro %}
 
 {% macro event_chip(e) %}
-    {%- set href = e.source_url | external_url -%}
+    {%- set href = e | evidence_href -%}
     <a class="cite ev-border-{{ vocab.EVIDENCE_GROUPS[e.evidence_type] }}"{% if href %} href="{{ href }}" target="_blank" rel="noopener noreferrer"{% endif %}
        title="{{ vocab.EVENT_TYPES[e.event_type] }}{% if e.event_date %} · {{ e.event_date | fmt_date }}{% endif %} · {{ e.source_title or e.source_name }}{% if e.excerpt %} · “{{ e.excerpt }}”{% endif %}">
         {{ e.title | truncate(36) }}</a>

@@ -7,6 +7,7 @@ from flask import Flask, abort, flash, redirect, render_template, request, url_f
 
 import database
 import jobs
+import links
 import screening
 from enrichment import formatting
 from screener import assess, deep
@@ -32,17 +33,21 @@ def inject_vocabulary():
 
 @app.template_filter("external_url")
 def external_url(value):
-    """Return a safe http(s) link for a stored URL/website, or None.
-    Bare domains like 'acme.com' become https://acme.com; anything with a
-    different scheme (e.g. javascript:) is refused."""
-    if not value:
-        return None
-    value = value.strip()
-    if re.match(r"^https?://", value, re.I):
-        return value
-    if re.match(r"^[\w.-]+\.[a-z]{2,}(/\S*)?$", value, re.I):
-        return "https://" + value
-    return None
+    """A safe http(s) link for a stored URL/website, or None (see links.py)."""
+    return links.external_url(value)
+
+
+@app.template_filter("evidence_href")
+def evidence_href(item):
+    """Link for a piece of evidence: jumps to the quoted text on the page,
+    opens a PDF at the cited page, or '' when no page shows it (links.py)."""
+    return links.evidence_href(item)
+
+
+@app.template_test("off_site")
+def off_site(item):
+    """True for evidence from Exa's company profile, which isn't on the company's own site."""
+    return links.is_off_site(item)
 
 
 @app.template_filter("no_refs")
