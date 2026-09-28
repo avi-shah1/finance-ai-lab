@@ -440,17 +440,40 @@ def get_latest_runs(company_ids):
 # Searches and candidates
 # ---------------------------------------------------------------------------
 
-def insert_search(buyer_company_id, target_sector, geography, criteria=None):
+def insert_search(buyer_company_id, target_sector, geography, criteria=None, buyer_brief=None):
     with cursor() as cur:
         cur.execute(
             """
-            INSERT INTO searches (buyer_company_id, target_sector, geography, criteria)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO searches (buyer_company_id, target_sector, geography, criteria,
+                                  buyer_brief, buyer_brief_updated_at)
+            VALUES (%s, %s, %s, %s, %s, CASE WHEN %s IS NULL THEN NULL ELSE now() END)
             RETURNING id;
             """,
-            (buyer_company_id, target_sector, geography, criteria),
+            (buyer_company_id, target_sector, geography, criteria, buyer_brief, buyer_brief),
         )
         return cur.fetchone()["id"]
+
+
+def update_buyer_brief(search_id, brief):
+    with cursor() as cur:
+        cur.execute("UPDATE searches SET buyer_brief = %s, buyer_brief_updated_at = now() WHERE id = %s;",
+                    (brief, search_id))
+
+
+def get_ai_headlines(search_id):
+    """{company_id: latest AI overall row (headline, highlights)} for a search,
+    shown in the results table even when the analyst has overridden the rating."""
+    with cursor(readonly=True) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (company_id) company_id, headline, rationale, created_at
+            FROM assessments
+            WHERE search_id = %s AND dimension = 'overall' AND assessed_by = 'ai'
+            ORDER BY company_id, created_at DESC;
+            """,
+            (search_id,),
+        )
+        return {r["company_id"]: r for r in cur.fetchall()}
 
 
 def set_search_status(search_id, status, message=None, error=None):
@@ -622,7 +645,7 @@ def get_candidates(search_id):
         cur.execute(
             """
             SELECT c.*, sc.origin, sc.added_at, sc.stage, sc.match_reason, sc.relevance,
-                   sc.discovered_via, sc.rank,
+                   sc.discovered_via, sc.rank, sc.screened_at, sc.screening_error,
                    coalesce((SELECT array_agg(DISTINCT h.url) FROM discovery_hits h
                              WHERE h.search_id = sc.search_id AND h.company_id = sc.company_id),
                             '{}') AS hit_urls
@@ -743,13 +766,16 @@ def save_ai_assessment(search_id, company_id, model, prompt_version, rows):
             cur,
             """
             INSERT INTO assessments (search_id, company_id, dimension, criterion, rating, rationale,
-                                     facts_summary, interpretation, assessed_by, model, prompt_version)
+                                     facts_summary, interpretation, headline, highlights, cites_brief,
+                                     assessed_by, model, prompt_version)
             VALUES %s
             RETURNING id, dimension, criterion;
             """,
             [(search_id, company_id, r["dimension"], r["criterion"], r["rating"], r.get("rationale"),
-              r.get("facts_summary"), r.get("interpretation"), model, prompt_version) for r in rows],
-            template="(%s, %s, %s, %s, %s, %s, %s, %s, 'ai', %s, %s)",
+              r.get("facts_summary"), r.get("interpretation"), r.get("headline"),
+              Json(r["highlights"]) if r.get("highlights") else None, bool(r.get("cites_brief")),
+              model, prompt_version) for r in rows],
+            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'ai', %s, %s)",
             fetch=True,
         )
         ids = {(r["dimension"], r["criterion"]): r["id"] for r in returned}

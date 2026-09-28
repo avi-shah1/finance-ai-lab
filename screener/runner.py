@@ -20,15 +20,19 @@ SCREEN_LIMIT = 20     # candidates screened automatically per search
 PARALLEL = 4          # companies screened at the same time
 
 
-def run_screening(search_id, company_ids=None):
+def run_screening(search_id, company_ids=None, gather=True):
     """Screen the top SCREEN_LIMIT discovered candidates, or exactly
-    `company_ids` when given. Returns a summary dict."""
+    `company_ids` when given. gather=False re-runs only the assessment on
+    the evidence already held (e.g. after the buyer brief changed).
+    Returns a summary dict."""
     search = database.get_search(search_id)
     status = lambda message: database.set_search_status(search_id, "screening", message)
+    verb = "Screening" if gather else "Re-assessing"
 
-    status("Profiling the buyer")
-    database.add_search_decision(search_id, "buyer", "profile",
-                                 buyer.ensure_buyer_profile(search["buyer_company_id"], search_id))
+    if gather:
+        status("Profiling the buyer")
+        database.add_search_decision(search_id, "buyer", "profile",
+                                     buyer.ensure_buyer_profile(search["buyer_company_id"], search_id))
     buyer_profile = _profile(search["buyer_company_id"])
 
     candidates = database.get_candidates(search_id)
@@ -40,11 +44,12 @@ def run_screening(search_id, company_ids=None):
         return {"screened": 0, "failed": 0}
 
     lock, progress = threading.Lock(), {"done": 0, "failed": 0}
-    status(f"Screening {len(todo)} candidates (0 done)")
+    status(f"{verb} {len(todo)} candidates (0 done)")
 
     def screen_one(candidate):
         try:
-            evidence.gather(candidate["id"], search_id=search_id)
+            if gather:
+                evidence.gather(candidate["id"], search_id=search_id)
             assess.assess_candidate(search, buyer_profile, candidate["id"])
             database.mark_screened(search_id, candidate["id"])
         except Exception as exc:
@@ -56,15 +61,15 @@ def run_screening(search_id, company_ids=None):
             with lock:
                 progress["done"] += 1
                 done = progress["done"]
-            status(f"Screening {len(todo)} candidates ({done} done)")
+            status(f"{verb} {len(todo)} candidates ({done} done)")
 
     with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
         list(pool.map(screen_one, todo))
 
     screened = progress["done"] - progress["failed"]
     database.add_search_decision(
-        search_id, "screening", "complete",
-        f"{screened} of {len(todo)} candidates screened and assessed"
+        search_id, "screening" if gather else "re-assessment", "complete",
+        f"{screened} of {len(todo)} candidates " + ("screened and assessed" if gather else "re-assessed")
         + (f"; {progress['failed']} failed (see each candidate)" if progress["failed"] else ""))
     return {"screened": screened, "failed": progress["failed"]}
 

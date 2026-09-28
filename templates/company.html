@@ -28,20 +28,25 @@
         </div>
     </div>
     <div class="head-side">
-        {% if search %}
-            <div class="screening-view">
-                <span class="muted small">Screening view vs {{ search.buyer_name }}</span>
-                {{ ui.rating_chip(assessments.get(("overall", None)), overall=true) }}
-            </div>
-        {% endif %}
         {{ ui.coverage_meter(profile.coverage) }}
     </div>
 </header>
+
+{% if search %}
+    {# The assessment comes first; the raw evidence it draws on follows. #}
+    {% include "_report.html" %}
+    <h2 class="section-divider" id="evidence">Evidence on file</h2>
+{% endif %}
 
 {{ ui.evidence_legend() }}
 
 <div class="layout-detail">
     <nav class="section-nav" aria-label="Sections">
+        {% if search %}
+            <span class="nav-group">Report</span>
+            <a href="#report">Verdict</a>
+            {% for d in vocab.DIMENSIONS %}<a href="#{{ d.code }}">{{ d.label }}</a>{% endfor %}
+        {% endif %}
         <span class="nav-group">Evidence</span>
         <a href="#research">Research</a>
         <a href="#overview">Overview</a>
@@ -53,9 +58,6 @@
         <a href="#hiring">Hiring</a>
         <a href="#technology">Technology / patents</a>
         <a href="#sources">Sources</a>
-        <span class="nav-group">Screening</span>
-        {% if search %}<a href="#overall">Overall view</a>{% endif %}
-        {% for d in vocab.DIMENSIONS %}<a href="#{{ d.code }}">{{ d.label }}</a>{% endfor %}
         <a href="#record">Record evidence</a>
     </nav>
 
@@ -163,107 +165,12 @@
             {{ ui.sources_register(profile) }}
         </section>
 
-        <h2 class="section-divider" id="screening">Screening{% if search %} against {{ search.buyer_name }}{% endif %}</h2>
-
-        {% if search %}
-            {% set ai_overall = ai_assessment.get(("overall", None)) %}
-            {% set current_overall = assessments.get(("overall", None)) %}
-            <section class="panel" id="overall">
-                <div class="panel-head">
-                    <h2>Overall view</h2>
-                    {% if current_overall %}{{ ui.rating_chip(current_overall, overall=true) }}
-                    {% elif ai_assessment %}<span class="rating rating-insufficient_evidence">Insufficient evidence</span>
-                    {% else %}{{ ui.rating_chip(None) }}{% endif %}
-                </div>
-                {% if candidate %}
-                    <div class="candidate-bar">
-                        <span class="muted small">Stage in this search: <strong>{{ candidate.stage | replace("_", " ") | capitalize }}</strong></span>
-                        {{ ui.candidate_actions(candidate, search) }}
-                        {% if not running %}
-                            <form class="inline-form" method="post" action="{{ url_for('screen_candidates', search_id=search.id) }}">
-                                <input type="hidden" name="company_id" value="{{ c.id }}">
-                                <input type="hidden" name="next" value="{{ request.full_path }}">
-                                <button class="btn btn-sm" type="submit" title="Gather fresh evidence and assess again (about 5 cents)">{{ "Re-assess" if ai_assessment else "Screen now" }}</button>
-                            </form>
-                        {% endif %}
-                    </div>
-                {% endif %}
-                {% if candidate and candidate.screening_error %}
-                    <p class="notice notice-failed">Screening failed: {{ candidate.screening_error }}</p>
-                {% endif %}
-                {% if ai_assessment %}
-                    {% if ai_overall %}
-                        {{ ui.ai_draft(ai_overall, current_overall, overall=true) }}
-                        <p class="lede">{{ ai_overall.rationale }}</p>
-                        {{ ui.cited_evidence(ai_overall, facts_by_id, events_by_id, c) }}
-                    {% else %}
-                        <p class="muted">Claude found no cited evidence for any dimension, so there is no overall view. Deep research may help.</p>
-                    {% endif %}
-                    {{ ui.override_form(search, c, "overall", None, vocab.OVERALL_VIEWS, request.full_path) }}
-                {% elif not candidate %}
-                    <p class="notice">This company isn't a candidate in this search.</p>
-                {% else %}
-                    {{ ui.empty_state("Not screened yet. Screening gathers light evidence and asks Claude for a draft assessment.") }}
-                {% endif %}
+        {% if not search %}
+            <section class="panel" id="screening">
+                <h2>Screening</h2>
+                <p class="notice">Assessments are made against a specific buyer. Open this company from a search to see its target report.</p>
             </section>
         {% endif %}
-
-        {% for d in vocab.DIMENSIONS %}
-            {% set ai_dim = ai_assessment.get((d.code, None)) %}
-            <section class="panel dimension" id="{{ d.code }}">
-                <div class="panel-head">
-                    <h2>{{ d.label }}</h2>
-                    {% if search %}{{ ui.rating_chip(assessments.get((d.code, None))) }}{% endif %}
-                </div>
-                {% if not search %}
-                    <p class="notice">Assessments are made against a specific buyer. Open this company from a search to see them.</p>
-                {% elif ai_dim %}
-                    {{ ui.ai_draft(ai_dim, assessments.get((d.code, None))) }}
-                    <div class="grid-2 facts-vs-view">
-                        <div>
-                            <h3 class="subhead">What the evidence shows</h3>
-                            <p>{{ ai_dim.facts_summary or "—" }}</p>
-                        </div>
-                        <div>
-                            <h3 class="subhead">Claude's interpretation</h3>
-                            <p>{{ ai_dim.interpretation or "—" }}</p>
-                        </div>
-                    </div>
-                    {{ ui.cited_evidence(ai_dim, facts_by_id, events_by_id, c) }}
-                {% endif %}
-                <ul class="criteria-list">
-                    {% for code, label in d.criteria.items() %}
-                        {% set a = assessments.get((d.code, code)) %}
-                        {% set ai_c = ai_assessment.get((d.code, code)) %}
-                        <li>
-                            <span>{{ label }}</span>
-                            {% if search %}{{ ui.rating_chip(a) }}{% else %}<span class="muted small">Buyer-specific</span>{% endif %}
-                            {% if a and a.rationale %}<p class="rationale">{% if a.assessed_by == "analyst" %}<strong>Your view:</strong> {% endif %}{{ a.rationale }}</p>{% endif %}
-                            {% if ai_c and (ai_c.fact_ids or ai_c.event_ids) %}
-                                <p class="rationale small">Cites {{ (ai_c.fact_ids + ai_c.event_ids) | length }} item{{ "s" if (ai_c.fact_ids + ai_c.event_ids) | length != 1 }}:
-                                    {% for fid in ai_c.fact_ids %}{% set f = facts_by_id.get(fid) %}{% if f %}<span class="cite" title="{{ f.label }} · {{ vocab.EVIDENCE_TYPES[f.evidence_type] }}{% if f.excerpt %} · “{{ f.excerpt }}”{% endif %}">{{ f.value_text | truncate(40) }}</span>{% endif %}{% endfor %}
-                                    {% for eid in ai_c.event_ids %}{% set e = events_by_id.get(eid) %}{% if e %}<span class="cite" title="{{ vocab.EVENT_TYPES[e.event_type] }} · {{ e.source_title or e.source_name }}">{{ e.title | truncate(40) }}</span>{% endif %}{% endfor %}
-                                </p>
-                            {% endif %}
-                        </li>
-                    {% endfor %}
-                </ul>
-                {% if search and ai_assessment %}
-                    {{ ui.override_form(search, c, d.code, None, vocab.DIMENSION_RATINGS, request.full_path) }}
-                {% endif %}
-                <details class="evidence-on-file">
-                    <summary>All relevant evidence on file</summary>
-                    {% set facts = profile.all(*d.fact_types) %}
-                    {% set events = profile.events_of(*d.event_types) %}
-                    {% if facts or events %}
-                        {% if facts %}{{ ui.fact_chips(facts, "") }}{% endif %}
-                        {% if events %}{{ ui.event_list(events) }}{% endif %}
-                    {% else %}
-                        {{ ui.empty_state("Not researched yet.") }}
-                    {% endif %}
-                </details>
-            </section>
-        {% endfor %}
 
         <section class="panel" id="record">
             <h2>Record evidence</h2>

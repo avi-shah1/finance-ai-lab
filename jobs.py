@@ -65,9 +65,10 @@ def _run(search_id):
             _running.discard(search_id)
 
 
-def start_screening(search_id, company_ids):
+def start_screening(search_id, company_ids, gather=True):
     """Screen specific candidates in the background (e.g. ones beyond the
-    automatic top 20, or to re-assess). Returns False if the search is busy."""
+    automatic top 20), or with gather=False only re-run their assessments.
+    Returns False if the search is busy."""
     with _lock:
         if search_id in _running:
             return False
@@ -75,9 +76,10 @@ def start_screening(search_id, company_ids):
 
     def work():
         try:
-            summary = run_screening(search_id, company_ids=company_ids)
+            summary = run_screening(search_id, company_ids=company_ids, gather=gather)
             database.set_search_status(search_id, "complete",
-                                       f"{summary['screened']} more candidate(s) screened")
+                                       f"{summary['screened']} candidate(s) "
+                                       + ("screened" if gather else "re-assessed"))
         except Exception as exc:
             log.exception("Screening job for search %s failed", search_id)
             database.set_search_status(search_id, "failed", error=f"{type(exc).__name__}: {exc}")

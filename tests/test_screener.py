@@ -23,7 +23,12 @@ def answer(**overrides):
         dims[code] = {"rating": "strong", "facts": "f", "interpretation": "i", "evidence_ids": [],
                       "criteria": criterion_list(code)}
     dims.update(overrides)
-    dims.setdefault("overall", {"rating": "good_fit", "rationale": "because", "evidence_ids": ["F1"]})
+    dims.setdefault("overall", {
+        "rating": "good_fit", "headline": "Good fit because F1.", "rationale": "because", "evidence_ids": ["F1"],
+        "strengths": [{"text": "Fast growth", "evidence_ids": ["E9"]}, {"text": "Unsupported claim", "evidence_ids": []},
+                      {"text": "Invented", "evidence_ids": ["F404"]}],
+        "risks": [{"text": "No revenue disclosed", "evidence_ids": []}, {"text": "Owned by a group", "evidence_ids": ["F2"]}],
+        "next_checks": ["Is the founder willing to sell?", " "]})
     return AssessmentResult.model_validate(dims)
 
 
@@ -51,8 +56,46 @@ class CitationRuleTests(unittest.TestCase):
         dim = rows[("strategic_fit", None)]
         self.assertEqual(dim["rating"], "strong")
         self.assertEqual((sorted(dim["fact_ids"]), dim["event_ids"]), ([1, 2], [9]))
-        self.assertEqual(dropped, 6)                   # one bad ID in each of 6 criteria
+        self.assertEqual(dropped, 7)                   # one bad ID in each of 6 criteria + F404 in a strength
         self.assertEqual(rows[("overall", None)]["rating"], "good_fit")
+
+    def test_criteria_must_belong_to_their_dimension(self):
+        crit = criterion_list("strategic_fit", ids=["F1"]) + [
+            {"criterion": "hiring", "rating": "strong", "evidence_ids": ["F1"], "reason": "wrong dimension"},
+            {"criterion": "made_up", "rating": "strong", "evidence_ids": ["F1"], "reason": "unknown"}]
+        rows, _ = self.rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+                                                  "evidence_ids": ["F1"], "criteria": crit}))
+        self.assertNotIn(("strategic_fit", "hiring"), rows)
+        self.assertNotIn(("strategic_fit", "made_up"), rows)
+        self.assertEqual(len([k for k in rows if k[0] == "strategic_fit" and k[1]]), 6)
+
+    def test_highlights(self):
+        crit = criterion_list("strategic_fit", ids=["F1"])
+        rows, _ = self.rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+                                                  "evidence_ids": ["F1"], "criteria": crit}))
+        overall = rows[("overall", None)]
+        self.assertEqual(overall["headline"], "Good fit because F1.")
+        hl = overall["highlights"]
+        self.assertEqual([p["text"] for p in hl["strengths"]], ["Fast growth"])   # uncited/invented dropped
+        self.assertEqual([p["text"] for p in hl["risks"]], ["No revenue disclosed", "Owned by a group"])
+        self.assertEqual(hl["next_checks"], ["Is the founder willing to sell?"])
+        # evidence behind strengths and risks is linked to the overall row
+        self.assertEqual((sorted(overall["fact_ids"]), overall["event_ids"]), ([1, 2], [9]))
+
+    def test_buyer_brief_is_citable_but_not_a_fact(self):
+        crit = criterion_list("strategic_fit", ids=["BRIEF"])
+        rows, dropped = assess.to_rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+                                                             "evidence_ids": ["BRIEF"], "criteria": crit}),
+                                       {**VALID, "BRIEF": ("brief", None)})
+        rows = {(r["dimension"], r["criterion"]): r for r in rows}
+        c = rows[("strategic_fit", "strategy_alignment")]
+        self.assertEqual((c["rating"], c["cites_brief"], c["fact_ids"], c["event_ids"]), ("strong", True, [], []))
+        self.assertTrue(rows[("strategic_fit", None)]["cites_brief"])
+        # without a brief, citing BRIEF counts as an invented citation
+        rows2, _ = assess.to_rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+                                                        "evidence_ids": ["BRIEF"], "criteria": crit}), VALID)
+        self.assertEqual(next(r for r in rows2 if r["criterion"] == "strategy_alignment")["rating"],
+                         "insufficient_evidence")
 
     def test_facts_and_interpretation_kept_apart(self):
         crit = criterion_list("momentum_timing", ids=["E9"])

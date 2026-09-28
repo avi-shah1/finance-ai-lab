@@ -140,6 +140,7 @@ def home():
         "index.html",
         profiles=profiles,
         searches=database.get_recent_searches(),
+        brief_example=BRIEF_EXAMPLE,
     )
 
 
@@ -156,10 +157,42 @@ def create_search():
     buyer_id = database.find_or_create_company(buyer)
     if buyer_website:
         database.set_website_if_missing(buyer_id, buyer_website)
-    search_id = database.insert_search(buyer_id, sector, geography, _text("criteria"))
+    search_id = database.insert_search(buyer_id, sector, geography, _text("criteria"), _text("buyer_brief"))
     jobs.start_search(search_id)
     return redirect(url_for("show_search", search_id=search_id))
 
+
+@app.route("/searches/<int:search_id>/brief", methods=["POST"])
+def update_brief(search_id):
+    """Edit the buyer brief. Existing assessments were made without the new
+    brief, so the search page offers to re-assess them."""
+    database.get_search(search_id) or abort(404)
+    database.update_buyer_brief(search_id, _text("buyer_brief"))
+    flash("Buyer brief saved. Re-assess the screened companies to apply it.", "info")
+    return redirect(url_for("show_search", search_id=search_id) + "#buyer")
+
+
+@app.route("/searches/<int:search_id>/reassess", methods=["POST"])
+def reassess_candidates(search_id):
+    """Re-run only the assessment (no new evidence gathering) for chosen
+    candidates, or for every screened one."""
+    database.get_search(search_id) or abort(404)
+    screened = [c["id"] for c in database.get_candidates(search_id) if c["screened_at"]]
+    chosen = request.form.getlist("company_id", type=int)
+    company_ids = [cid for cid in chosen if cid in screened] if chosen else screened
+    back = _next_url(url_for("show_search", search_id=search_id))
+    if not company_ids:
+        flash("No screened companies to re-assess.", "info")
+    elif not jobs.start_screening(search_id, company_ids, gather=False):
+        flash("This search is already running. Try again when it has finished.", "info")
+    else:
+        flash(f"Re-assessing {len(company_ids)} compan{'y' if len(company_ids) == 1 else 'ies'} in the background.", "info")
+    return redirect(back)
+
+
+# Shown in grey in the (optional) buyer brief box, as a model of what to write.
+BRIEF_EXAMPLE = ("e.g. UK dental group, 40 practices, PE-backed. Wants practice-management software to roll "
+                 "out across the group. Bought 2 clinic chains in 2024. Budget up to £20m.")
 
 # Search statuses during which the page refreshes itself to show progress.
 RUNNING_STATUSES = ("queued", "discovering", "screening")
@@ -188,12 +221,20 @@ def show_search(search_id):
     excluded = set(ids) | {buyer_id}
     addable = [c for c in database.get_all_companies(library_only=True) if c["id"] not in excluded]
 
+    # Assessments made before the buyer brief was last edited don't reflect it.
+    headlines = database.get_ai_headlines(search_id)
+    brief_changed = search["buyer_brief_updated_at"]
+    stale = sum(1 for h in headlines.values() if brief_changed and h["created_at"] < brief_changed)
+
     usage = database.get_usage_summary(search_id=search_id)
     return render_template(
         "search.html",
         search=search,
         running=search["status"] in RUNNING_STATUSES,
         buyer=buyer,
+        headlines=headlines,
+        stale_assessments=stale,
+        brief_example=BRIEF_EXAMPLE,
         profiles=shown,
         filtered=filtered,
         dismissed=dismissed,

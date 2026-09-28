@@ -493,7 +493,7 @@
 
 {# Discovered candidates for a search: what each company's own page says,
    why it matched, and where it was found. #}
-{% macro discovery_table(profiles, search, assessments) %}
+{% macro discovery_table(profiles, search, assessments, headlines={}) %}
     <div class="table-wrap">
         <table class="data-table company-table">
             <thead>
@@ -536,7 +536,14 @@
                             {% if c.relevance %}<span class="relevance relevance-{{ c.relevance }}">{{ c.relevance | capitalize }} relevance</span>{% endif %}
                             {{ c.match_reason or "" }}
                         </td>
-                        <td data-label="Screening view">{{ screening_summary(c, assessments.get(c.id, {}), search) }}</td>
+                        <td data-label="Screening view" class="verdict-cell">
+                            {{ screening_summary(c, assessments.get(c.id, {}), search) }}
+                            {% set h = headlines.get(c.id) %}
+                            {% if h and (h.headline or h.rationale) %}
+                                <p class="verdict-line">{{ (h.headline or h.rationale) | truncate(170) }}
+                                    <a href="{{ url_for('show_company', company_id=c.id, search=search.id) }}#report">Why →</a></p>
+                            {% endif %}
+                        </td>
                         <td data-label="Evidence">
                             {{ coverage_meter(p.coverage) }}
                             {% for url in (c.hit_urls or [])[:2] %}

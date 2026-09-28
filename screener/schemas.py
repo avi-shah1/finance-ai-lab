@@ -38,38 +38,49 @@ Rating = Literal["very_strong", "strong", "mixed", "weak", "insufficient_evidenc
 OverallRating = Literal[tuple(screening.OVERALL_VIEWS)]
 EVIDENCE_IDS = Field(description="IDs of the evidence lines relied on, e.g. ['F120', 'E7']. Empty if none.")
 
-
-def _criterion_model(dimension):
-    return create_model(
-        f"{dimension['code'].title().replace('_', '')}Criterion",
-        criterion=(Literal[tuple(dimension["criteria"])], ...),
-        rating=(Rating, ...),
-        evidence_ids=(list[str], EVIDENCE_IDS),
-        reason=(str, Field(description="At most 25 words, referring to the cited evidence.")),
-    )
+# One shared criterion type and one shared dimension type keep the schema
+# small: the API compiles the schema into a grammar with a size limit, and
+# four near-identical per-dimension types exceeded it. That each criterion
+# belongs to its dimension is checked in code (assess.to_rows).
 
 
-def _dimension_model(dimension):
-    return create_model(
-        f"{dimension['code'].title().replace('_', '')}Assessment",
-        rating=(Rating, ...),
-        facts=(str, Field(description=(
-            "What the cited evidence shows, restated plainly with no judgement. 1-3 sentences."))),
-        interpretation=(str, Field(description=(
-            "Your judgement of what that means for this buyer, and the main uncertainty. 1-3 sentences."))),
-        evidence_ids=(list[str], EVIDENCE_IDS),
-        criteria=(list[_criterion_model(dimension)], Field(description="One entry per criterion of this dimension.")),
-    )
+class Criterion(BaseModel):
+    criterion: str = Field(description="The criterion's code exactly as listed for this dimension, e.g. product_adjacency.")
+    rating: Rating
+    evidence_ids: list[str] = EVIDENCE_IDS
+    reason: str = Field(description="At most 25 words, referring to the cited evidence.")
+
+
+class Dimension(BaseModel):
+    rating: Rating
+    facts: str = Field(description="What the cited evidence shows, restated plainly with no judgement. 1-3 sentences.")
+    interpretation: str = Field(description=(
+        "Your judgement of what that means for this buyer, and the main uncertainty. 1-3 sentences."))
+    evidence_ids: list[str] = EVIDENCE_IDS
+    criteria: list[Criterion] = Field(description="One entry per criterion listed for this dimension.")
+
+
+class Point(BaseModel):
+    text: str = Field(description="One short sentence, at most 20 words.")
+    evidence_ids: list[str] = EVIDENCE_IDS
 
 
 class OverallAssessment(BaseModel):
     rating: OverallRating
+    headline: str = Field(description=(
+        "The verdict in one sentence of at most 30 words, leading with the deciding reason, "
+        "e.g. 'Already majority-owned by Henry Schein One, so not independently available.'"))
     rationale: str = Field(description="2-3 sentences drawing on the four dimensions, including the biggest risk.")
     evidence_ids: list[str] = EVIDENCE_IDS
+    strengths: list[Point] = Field(description="Up to 3 reasons this could be a good acquisition, each citing evidence.")
+    risks: list[Point] = Field(description=(
+        "Up to 3 risks or blockers. Cite evidence where it exists; a risk can also be a gap in the evidence."))
+    next_checks: list[str] = Field(description=(
+        "Up to 3 short questions an analyst should answer next, e.g. 'Is the founder open to selling?'"))
 
 
 AssessmentResult = create_model(
     "AssessmentResult",
-    **{d["code"]: (_dimension_model(d), ...) for d in screening.DIMENSIONS},
+    **{d["code"]: (Dimension, ...) for d in screening.DIMENSIONS},
     overall=(OverallAssessment, ...),
 )

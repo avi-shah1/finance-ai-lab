@@ -26,7 +26,9 @@ from .schemas import AssessmentResult
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "assess-v1"
+PROMPT_VERSION = "assess-v2"   # v2: headline, strengths/risks/next checks, buyer brief
+BRIEF_ID = "BRIEF"             # evidence ID of the analyst's buyer brief
+MAX_POINTS = 3
 MAX_PER_TYPE = 12       # values per multi-valued fact type (e.g. products)
 MAX_EVENTS = 15
 EXCERPT_CHARS = 160
@@ -42,7 +44,7 @@ BUYER_TYPES = {"description", "product", "capability", "industry_served", "custo
 
 SYSTEM = """You assess a possible acquisition target for a named buyer, for an M&A screening tool used by analysts.
 
-You get numbered evidence lines about the buyer (B section) and the target (T section). Each line has an ID (F = fact, E = event), what it says, and its source type.
+You get numbered evidence lines about the buyer and the target. Each line has an ID (F = fact, E = event), what it says, and its source type. There may also be a buyer brief (ID BRIEF): the analyst's description of the buyer's strategy and what it wants. Treat it as the buyer's stated intent, the best guide to strategic fit, but not as verified fact; cite BRIEF when you rely on it.
 
 Rules:
 - Use ONLY the evidence lines. Do not use outside knowledge about either company, even if you recognise them.
@@ -51,6 +53,7 @@ Rules:
 - Weigh sources: filings and registers are strongest; the company's own website is a claim; third-party estimates (e.g. revenue estimates) and AI interpretations are weakest. Say when a rating rests on weak sources.
 - The target already matches the search's sector and geography; judge how good a target it is, not whether it is in scope.
 - Ratings: very_strong, strong, mixed, weak, insufficient_evidence. Overall: very_strong_fit, good_fit, mixed, weak_fit, avoid ('avoid' only for a clear evidenced blocker, e.g. already acquired, dissolved, far too large to buy).
+- The overall headline gives the verdict and its deciding reason in one sentence. Strengths and risks are the few points that matter most, each backed by cited evidence where possible; next_checks are what an analyst should find out next.
 - Be concise. No numbers you were not given."""
 
 
@@ -60,15 +63,19 @@ def assess_candidate(search, buyer_profile, company_id):
     buyer_lines, buyer_ids = evidence_lines(buyer_profile, buyer=True)
     target_lines, target_ids = evidence_lines(target, buyer=False)
     valid = {**buyer_ids, **target_ids}
+    brief = (search.get("buyer_brief") or "").strip()
+    if brief:
+        valid[BRIEF_ID] = ("brief", None)
 
     # The first block is identical for every candidate in a search (buyer,
-    # search, criteria), so it is cached: later calls pay ~10% for it.
+    # search, criteria, brief), so it is cached: later calls pay ~10% for it.
     shared = (
         f"Buyer: {buyer_profile.company['name']}\n"
         f"Search: target sector '{search['target_sector']}', geography '{search['geography']}'"
         + (f", additional criteria: {search['criteria']}" if search.get("criteria") else "") + "\n\n"
         f"{_criteria_guide()}\n\n"
-        "<buyer_evidence>\n" + ("\n".join(buyer_lines) or "(none)") + "\n</buyer_evidence>")
+        + (f"<buyer_brief id=\"{BRIEF_ID}\">\n{brief}\n</buyer_brief>\n\n" if brief else "")
+        + "<buyer_evidence>\n" + ("\n".join(buyer_lines) or "(none)") + "\n</buyer_evidence>")
     content = [
         {"type": "text", "text": shared, "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": (
@@ -160,9 +167,10 @@ def to_rows(result, valid):
         dim_cited = keep(dim.evidence_ids)
         seen = set()
         for c in dim.criteria:
-            if c.criterion in seen:
-                continue
-            seen.add(c.criterion)
+            code = c.criterion.strip().lower()
+            if code not in d["criteria"] or code in seen:
+                continue            # not a criterion of this dimension, or a repeat
+            seen.add(code)
             cited = keep(c.evidence_ids)
             dim_cited += [x for x in cited if x not in dim_cited]
             rating = c.rating if cited else "insufficient_evidence"
@@ -170,8 +178,9 @@ def to_rows(result, valid):
             if not cited and c.rating != "insufficient_evidence":
                 reason = "No valid evidence was cited, so this is marked insufficient. " + reason
             facts, events = split(cited)
-            rows.append({"dimension": d["code"], "criterion": c.criterion, "rating": rating,
-                         "rationale": reason, "fact_ids": facts, "event_ids": events})
+            rows.append({"dimension": d["code"], "criterion": code, "rating": rating,
+                         "rationale": reason, "fact_ids": facts, "event_ids": events,
+                         "cites_brief": BRIEF_ID in cited})
         rating = dim.rating if dim_cited else "insufficient_evidence"
         if dim_cited and rating != "insufficient_evidence":
             evidenced_dimensions += 1
@@ -180,13 +189,27 @@ def to_rows(result, valid):
                      "rationale": formatting.squash(dim.interpretation, 800),
                      "facts_summary": formatting.squash(dim.facts, 800),
                      "interpretation": formatting.squash(dim.interpretation, 800),
-                     "fact_ids": facts, "event_ids": events})
+                     "fact_ids": facts, "event_ids": events, "cites_brief": BRIEF_ID in dim_cited})
 
     if evidenced_dimensions:
-        cited = keep(result.overall.evidence_ids)
+        o = result.overall
+        cited = keep(o.evidence_ids)
+        # A strength must rest on cited evidence; a risk may be a gap in it.
+        strengths = [p for p in (_point(p, keep) for p in o.strengths) if p["evidence_ids"]][:MAX_POINTS]
+        risks = [_point(p, keep) for p in o.risks][:MAX_POINTS]
+        for p in strengths + risks:
+            cited += [x for x in p["evidence_ids"] if x not in cited]
         facts, events = split(cited)
-        rows.append({"dimension": "overall", "criterion": None, "rating": result.overall.rating,
-                     "rationale": formatting.squash(result.overall.rationale, 800),
-                     "interpretation": formatting.squash(result.overall.rationale, 800),
-                     "fact_ids": facts, "event_ids": events})
+        rows.append({"dimension": "overall", "criterion": None, "rating": o.rating,
+                     "headline": formatting.squash(o.headline, 250),
+                     "rationale": formatting.squash(o.rationale, 800),
+                     "interpretation": formatting.squash(o.rationale, 800),
+                     "highlights": {"strengths": strengths, "risks": risks,
+                                    "next_checks": [formatting.squash(q, 200) for q in o.next_checks
+                                                    if q.strip()][:MAX_POINTS]},
+                     "fact_ids": facts, "event_ids": events, "cites_brief": BRIEF_ID in cited})
     return rows, dropped
+
+
+def _point(point, keep):
+    return {"text": formatting.squash(point.text, 200), "evidence_ids": keep(point.evidence_ids)}
