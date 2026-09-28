@@ -52,5 +52,25 @@ class CostTests(unittest.TestCase):
             usage.record_service("exa", "discovery_search", "search", 1)
 
 
+class StripRefsTests(unittest.TestCase):
+    def test_examples(self):
+        from enrichment.formatting import strip_refs
+        cases = {
+            "serving small and corporate dental practices in the UK (F988, F1036, F1037, F1038). Salesforce is":
+                "serving small and corporate dental practices in the UK. Salesforce is",
+            "no listed dental-specific vertical (F751, F782, F781, F784).": "no listed dental-specific vertical.",
+            "clinical modules (F847, F853-F861), based in Munich": "clinical modules, based in Munich",
+            "investments from SAP (E13) and Fresenius (E14) in 2026": "investments from SAP and Fresenius in 2026",
+            "owned by Henry Schein One (75-100% per the PSC register)":
+                "owned by Henry Schein One (75-100% per the PSC register)",       # real brackets kept
+            "matches the stated strategy (BRIEF).": "matches the stated strategy.",
+            "growth of 106.6% YoY per F475, strong": "growth of 106.6% YoY, strong",
+            "Supports F-Gas compliance and Series E funding": "Supports F-Gas compliance and Series E funding",
+            "": "", None: None,
+        }
+        for text, expected in cases.items():
+            self.assertEqual(strip_refs(text), expected, text)
+
+
 if __name__ == "__main__":
     unittest.main()

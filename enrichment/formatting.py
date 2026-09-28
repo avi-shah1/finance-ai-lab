@@ -92,6 +92,26 @@ def clean_bullets(bullets, limit=3):
     return "\n".join(cleaned[:limit]) or None
 
 
+# Evidence IDs Claude cites (F988 = fact 988, E13 = event 13, BRIEF = the
+# buyer brief). They are stored separately and shown as source chips, so
+# strip_refs() removes any Claude also wrote into its prose.
+_REF = r"(?:[FE]\d{1,7}(?:\s*[-–]\s*[FE]?\d{1,7})?|BRIEF)"
+_REF_GROUP = re.compile(rf"\s*[(\[]\s*{_REF}(?:\s*(?:,|;|and|&)\s*{_REF})*\s*[)\]]")
+_REF_BARE = re.compile(rf"(?:\s*(?:,|;|and|&)\s*)?\b(?:per|see|cf\.?)?\s*\b{_REF}\b")
+
+
+def strip_refs(text):
+    """'...in the UK (F988, F1036). Salesforce (F751) is...' -> '...in the UK. Salesforce is...'"""
+    if not text:
+        return text
+    text = _REF_GROUP.sub("", text)
+    text = _REF_BARE.sub("", text)
+    text = re.sub(r"\(\s*\)", "", text)                  # emptied brackets
+    text = re.sub(r"\s+([,.;:!?)])", r"\1", text)       # space before punctuation
+    text = re.sub(r"([,;])\s*([.;])", r"\2", text)     # ", ." left behind
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
 def squash(text, limit=300):
     text = re.sub(r"\s+", " ", text or "").strip()
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"

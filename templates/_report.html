@@ -60,7 +60,7 @@
                 {{ current_chip(("overall", None), overall=true) }}
             </div>
             {% if ai_overall %}
-                <p class="headline">{{ ai_overall.headline or ai_overall.rationale | truncate(220) }}</p>
+                <p class="headline">{{ (ai_overall.headline or ai_overall.rationale) | no_refs | truncate(220) }}</p>
             {% elif ai_assessment %}
                 <p class="headline">No dimension had cited evidence behind it, so there is no overall view yet.</p>
             {% elif candidate and candidate.screening_error %}
@@ -122,7 +122,7 @@
                 <a class="dim-tile" href="#{{ d.code }}">
                     <span class="dim-tile-label">{{ d.label }}</span>
                     {{ current_chip((d.code, None)) }}
-                    {% if ai_dim and ai_dim.interpretation %}<span class="dim-tile-text">{{ ai_dim.interpretation | truncate(120) }}</span>{% endif %}
+                    {% if ai_dim and ai_dim.interpretation %}<span class="dim-tile-text">{{ ai_dim.interpretation | no_refs | truncate(120) }}</span>{% endif %}
                 </a>
             {% endfor %}
         </div>
@@ -132,19 +132,19 @@
                 <div class="highlight-col good">
                     <h3 class="subhead">Why it could work</h3>
                     {% if hl.strengths %}
-                        <ul>{% for p in hl.strengths %}<li>{{ p.text }}<div class="chips">{{ id_chips(p.evidence_ids) }}</div></li>{% endfor %}</ul>
+                        <ul>{% for p in hl.strengths %}<li>{{ p.text | no_refs }}<div class="chips">{{ id_chips(p.evidence_ids) }}</div></li>{% endfor %}</ul>
                     {% else %}<p class="muted small">No evidenced strengths.</p>{% endif %}
                 </div>
                 <div class="highlight-col bad">
                     <h3 class="subhead">Risks &amp; blockers</h3>
                     {% if hl.risks %}
-                        <ul>{% for p in hl.risks %}<li>{{ p.text }}<div class="chips">{% if p.evidence_ids %}{{ id_chips(p.evidence_ids) }}{% else %}<span class="muted small">gap in the evidence</span>{% endif %}</div></li>{% endfor %}</ul>
+                        <ul>{% for p in hl.risks %}<li>{{ p.text | no_refs }}<div class="chips">{% if p.evidence_ids %}{{ id_chips(p.evidence_ids) }}{% else %}<span class="muted small">gap in the evidence</span>{% endif %}</div></li>{% endfor %}</ul>
                     {% else %}<p class="muted small">None identified.</p>{% endif %}
                 </div>
                 <div class="highlight-col next">
                     <h3 class="subhead">What to check next</h3>
                     {% if hl.next_checks %}
-                        <ul>{% for q in hl.next_checks %}<li>{{ q }}</li>{% endfor %}</ul>
+                        <ul>{% for q in hl.next_checks %}<li>{{ q | no_refs }}</li>{% endfor %}</ul>
                     {% else %}<p class="muted small">Nothing suggested.</p>{% endif %}
                 </div>
             </div>
@@ -153,7 +153,7 @@
         {% if ai_overall %}
             <details class="overall-reasoning">
                 <summary>Overall reasoning</summary>
-                <p>{{ ai_overall.rationale }}</p>
+                <p>{{ ai_overall.rationale | no_refs }}</p>
                 <div class="chips">{{ row_chips(ai_overall) }}</div>
             </details>
         {% endif %}
@@ -176,11 +176,11 @@
                 <div class="facts-vs-view">
                     <div>
                         <h3 class="subhead">What the evidence shows</h3>
-                        <p>{{ ai_dim.facts_summary or "—" }}</p>
+                        <p>{{ (ai_dim.facts_summary or "—") | no_refs }}</p>
                     </div>
                     <div>
                         <h3 class="subhead">AI interpretation</h3>
-                        <p>{{ ai_dim.interpretation or "—" }}</p>
+                        <p>{{ (ai_dim.interpretation or "—") | no_refs }}</p>
                     </div>
                 </div>
             {% endif %}
@@ -193,7 +193,7 @@
                             <tr>
                                 <td data-label="Criterion">{{ label }}</td>
                                 <td data-label="Rating">{{ current_chip((d.code, code)) }}</td>
-                                <td data-label="Why" class="desc">{{ ai_c.rationale if ai_c else "" }}</td>
+                                <td data-label="Why" class="desc">{{ (ai_c.rationale if ai_c else "") | no_refs }}</td>
                                 <td data-label="Evidence" class="chips">{% if ai_c %}{{ row_chips(ai_c) }}{% endif %}</td>
                             </tr>
                         {% endfor %}

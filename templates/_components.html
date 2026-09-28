@@ -644,7 +644,7 @@
                             {{ screening_summary(c, assessments.get(c.id, {}), search) }}
                             {% set h = headlines.get(c.id) %}
                             {% if h and (h.headline or h.rationale) %}
-                                <p class="verdict-line">{{ (h.headline or h.rationale) | truncate(170) }}</p>
+                                <p class="verdict-line">{{ (h.headline or h.rationale) | no_refs | truncate(170) }}</p>
                             {% endif %}
                             {% if assessments.get(c.id) %}
                                 <div class="row-buttons">

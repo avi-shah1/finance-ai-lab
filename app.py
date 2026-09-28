@@ -8,6 +8,7 @@ from flask import Flask, abort, flash, redirect, render_template, request, url_f
 import database
 import jobs
 import screening
+from enrichment import formatting
 from screener import deep
 from enrichment.runner import AI_LABELS, PROVIDER_LABELS, STRUCTURED_LABELS, enrich_company
 from profiles import CompanyProfile, build_profiles
@@ -42,6 +43,13 @@ def external_url(value):
     if re.match(r"^[\w.-]+\.[a-z]{2,}(/\S*)?$", value, re.I):
         return "https://" + value
     return None
+
+
+@app.template_filter("no_refs")
+def no_refs(value):
+    """Hide evidence IDs (F988, E13, BRIEF) that Claude wrote into its prose;
+    the citations are shown separately as source chips."""
+    return formatting.strip_refs(value)
 
 
 @app.template_filter("fmt_date")

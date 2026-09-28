@@ -26,7 +26,7 @@ from .schemas import AssessmentResult
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "assess-v2"   # v2: headline, strengths/risks/next checks, buyer brief
+PROMPT_VERSION = "assess-v3"   # v2: headline, strengths/risks/next checks, buyer brief; v3: no IDs in prose
 BRIEF_ID = "BRIEF"             # evidence ID of the analyst's buyer brief
 MAX_POINTS = 3
 MAX_PER_TYPE = 12       # values per multi-valued fact type (e.g. products)
@@ -48,7 +48,8 @@ You get numbered evidence lines about the buyer and the target. Each line has an
 
 Rules:
 - Use ONLY the evidence lines. Do not use outside knowledge about either company, even if you recognise them.
-- Every rating must cite the IDs of the lines it relies on. If no line addresses a criterion, rate it insufficient_evidence and cite nothing. Missing evidence is not evidence of weakness.
+- Every rating must cite the IDs of the lines it relies on, in the evidence_ids fields. If no line addresses a criterion, rate it insufficient_evidence and cite nothing. Missing evidence is not evidence of weakness.
+- Write all text (facts, interpretation, reasons, headline, strengths, risks, next checks) as plain prose for a reader: never put evidence IDs such as F120, E7 or BRIEF in the text; they belong only in evidence_ids.
 - 'facts' restates what the cited lines say, with no judgement. 'interpretation' is your judgement for this buyer. Keep them separate.
 - Weigh sources: filings and registers are strongest; the company's own website is a claim; third-party estimates (e.g. revenue estimates) and AI interpretations are weakest. Say when a rating rests on weak sources.
 - The target already matches the search's sector and geography; judge how good a target it is, not whether it is in scope.
