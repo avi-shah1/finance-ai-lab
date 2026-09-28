@@ -196,8 +196,11 @@ class CompanyProfile:
 
     @property
     def coverage(self):
-        known = sum(1 for t in CORE_FACT_TYPES if t in self._by_type)
-        return {"known": known, "total": len(CORE_FACT_TYPES), "sources": len(self.sources)}
+        # "What they do" counts whether it's the site's own words or Claude's summary.
+        have = set(self._by_type) | ({"description"} if "business_summary" in self._by_type else set())
+        items = [(label, code in have) for code, label in CORE_FACT_TYPES.items()]
+        return {"known": sum(found for _, found in items), "total": len(items),
+                "sources": len(self.sources), "items": items}
 
     @property
     def has_research(self):

@@ -454,12 +454,38 @@
     {% endif %}
 {% endmacro %}
 
+{# How many of the 8 key facts we hold; click to see which are found or missing. #}
 {% macro coverage_meter(cov) %}
-    <div class="coverage" title="{{ cov.known }} of {{ cov.total }} core fields have a sourced value">
-        <div class="coverage-bar"><span style="width: {{ (100 * cov.known / cov.total) | round | int }}%"></span></div>
-        <span class="coverage-text">{{ cov.known }}/{{ cov.total }} · {{ cov.sources }} source{{ "" if cov.sources == 1 else "s" }}</span>
-    </div>
+    <details class="coverage">
+        <summary title="Click to see which key facts are found and which are missing">
+            <span class="coverage-bar"><span style="width: {{ (100 * cov.known / cov.total) | round | int }}%"></span></span>
+            <span class="coverage-text">{{ cov.known }} of {{ cov.total }} key facts</span>
+        </summary>
+        <ul class="coverage-list">
+            {% for label, found in cov["items"] %}
+                <li class="{{ 'found' if found else 'missing' }}">{{ "✓" if found else "✗" }} {{ label }}</li>
+            {% endfor %}
+        </ul>
+        <p class="muted small coverage-sources">From {{ cov.sources }} source{{ "" if cov.sources == 1 else "s" }}</p>
+    </details>
 {% endmacro %}
+
+{# One size figure with where it came from, in plain words, e.g.
+   "12 staff" / "Exa profile"  or  "£47.3m revenue" / "Filed accounts, FY ended 28 Dec 2024". #}
+{% macro size_line(f, suffix) %}
+    {%- set href = fact_href(f) | trim -%}
+    {#- The step that extracted the figure (e.g. AI reading a filing) names it
+        better than the filing's publisher, so extracted_by comes first. -#}
+    {%- set src = vocab.SOURCE_SHORT_NAMES.get(f.extracted_by) or vocab.SOURCE_SHORT_NAMES.get(f.provider, f.source_name) -%}
+    <div class="size-line">
+        <span class="ev-dot ev-{{ vocab.EVIDENCE_GROUPS[f.evidence_type] }}" aria-hidden="true"></span>{{ f.value_text }} {{ suffix }}
+        <div class="size-src">
+            {% if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer" title="{{ f.source_title or f.source_name }}{% if f.excerpt %}: “{{ f.excerpt }}”{% endif %}">{{ src }}</a>{% else %}<span title="{% if f.excerpt %}“{{ f.excerpt }}”{% endif %}">{{ src }}</span>{% endif %}
+            {%- if f.period %}, {{ f.period }}{% endif %}
+            {%- if f.evidence_type == "third_party_estimate" %} · estimate{% endif %}
+        </div>
+    </div>
+{%- endmacro %}
 
 {# A table cell value: preferred fact + period + evidence dot, or unknown reason. #}
 {% macro cell_value(p, code) %}
@@ -602,10 +628,13 @@
                             {% set emp = p.fact("employee_count") %}
                             {% set rev = p.fact("revenue") %}
                             {% set founded = p.fact("founded_year") %}
-                            {% if emp %}<div>{{ fact_or_unknown(p, "employee_count") }} staff{% if emp.notes %}<div class="muted small">{{ emp.notes | replace("Headcount change: ", "") }}</div>{% endif %}</div>{% endif %}
-                            {% if rev %}<div>{{ fact_or_unknown(p, "revenue") }} revenue{% if rev.evidence_type == "third_party_estimate" %} <span class="muted small">(est.)</span>{% endif %}</div>{% endif %}
-                            {% if founded %}<div class="muted small">Founded {{ founded.value_text }}</div>{% endif %}
-                            {% if not emp and not rev %}{{ unknown("Not stated") }}{% endif %}
+                            {% if emp %}
+                                {{ size_line(emp, "staff") }}
+                                {% if emp.notes and emp.notes.startswith("Headcount change") %}<div class="muted small size-note">{{ emp.notes | replace("Headcount change: ", "") }}</div>{% endif %}
+                            {% endif %}
+                            {% if rev %}{{ size_line(rev, "revenue") }}{% endif %}
+                            {% if founded %}<div class="muted small size-note">Founded {{ founded.value_text }}</div>{% endif %}
+                            {% if not emp and not rev %}{{ unknown("No evidence") }}{% endif %}
                         </td>
                         <td data-label="Why it matched" class="desc">
                             {% if c.relevance %}<span class="relevance relevance-{{ c.relevance }}">{{ c.relevance | capitalize }} relevance</span>{% endif %}

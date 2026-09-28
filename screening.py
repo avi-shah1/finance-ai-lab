@@ -230,8 +230,27 @@ DIMENSIONS = [
 
 # Fact types that make up "evidence coverage" in the candidate table: how
 # many of the basics we hold a sourced value for. This measures research
-# completeness, not attractiveness.
-CORE_FACT_TYPES = [
-    "description", "ownership_status", "legal_status", "employee_count",
-    "revenue", "total_funding", "product", "customer_segment",
-]
+# completeness, not attractiveness. Values are the names shown in the checklist.
+CORE_FACT_TYPES = {
+    "description": "What they do",
+    "ownership_status": "Ownership",
+    "legal_status": "Legal status",
+    "employee_count": "Employees",
+    "revenue": "Revenue",
+    "total_funding": "Funding raised",
+    "product": "Products",
+    "customer_segment": "Customer segments",
+}
+
+# Where a fact came from, in plain words for the results table.
+SOURCE_SHORT_NAMES = {
+    "discovery": "Exa profile",
+    "companies_house": "Companies House",
+    "ai_documents": "Filed accounts",
+    "sec": "SEC filing",
+    "yfinance": "Yahoo Finance",
+    "website": "Company website",
+    "ai_website": "Company website",
+    "news": "News",
+    "manual": "Your entry",
+}
