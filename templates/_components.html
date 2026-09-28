@@ -521,7 +521,7 @@
                 {% for p in profiles %}
                     {% set c = p.company %}
                     {% set link = url_for("show_company", company_id=c.id, search=search.id if search else None) %}
-                    <tr>
+                    <tr data-filter-row>
                         <td data-label="Company">
                             <a class="company-link" href="{{ link }}">{{ c.name }}</a>
                         </td>
@@ -613,8 +613,8 @@
             <tbody>
                 {% for p in profiles %}
                     {% set c = p.company %}
-                    <tr>
-                        <td data-label="Company">
+                    <tr data-filter-row>
+                        <td data-label="Company" class="company-cell">
                             <a class="company-link" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}">{{ c.name }}</a>
                             {% set site = c.website | external_url %}
                             {% if site %}<div class="small"><a href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ c.domain or c.website }}<span aria-hidden="true"> ↗</span></a></div>{% endif %}
@@ -634,8 +634,8 @@
                             {% if founded %}<div class="muted small size-note">Founded {{ founded.value_text }}</div>{% endif %}
                             {% if not emp and not rev %}{{ unknown("No evidence") }}{% endif %}
                         </td>
-                        <td data-label="Matches your search?" class="desc">
-                            {% if c.relevance %}<span class="relevance relevance-{{ c.relevance }}">{{ {"high": "Strong", "medium": "Medium", "low": "Weak"}[c.relevance] }} match</span>{% endif %}
+                        <td data-label="Matches your search?" class="desc match-cell">
+                            {% if c.relevance %}<span class="relevance relevance-{{ c.relevance }}">{{ {"high": "Strong", "medium": "Medium", "low": "Weak"}[c.relevance] }} match</span><br>{% endif %}
                             {{ c.match_reason or "" }}
                         </td>
                         <td data-label="Fit for {{ search.buyer_name }}" class="verdict-cell">

@@ -9,30 +9,31 @@
 {# While the background job runs, reload every 4 seconds to show progress. #}
 {% block head %}{% if running %}<meta http-equiv="refresh" content="4">{% endif %}{% endblock %}
 
+{% block nav %}searches{% endblock %}
+
 {% block content %}
-<nav class="crumbs"><a href="{{ url_for('home') }}">Searches</a> / Search #{{ search.id }}</nav>
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a href="{{ url_for('home') }}#searches">Searches</a><span class="sep" aria-hidden="true">›</span><span>Search #{{ search.id }}</span>
+</nav>
 
 <header class="page-head">
     <div>
-        <p class="eyebrow">Target screen</p>
         <h1>{{ search.buyer_name }}</h1>
-        <div class="criteria">
-            <span class="criterion"><span class="muted">Sector</span> {{ search.target_sector }}</span>
-            <span class="criterion"><span class="muted">Geography</span> {{ search.geography }}</span>
-            {% if search.criteria %}<span class="criterion"><span class="muted">Criteria</span> {{ search.criteria }}</span>{% endif %}
-            {% if search.buyer_brief %}<a class="criterion" href="#buyer"><span class="muted">Buyer brief</span> given</a>{% endif %}
-            <span class="criterion"><span class="muted">Created</span> {{ search.created_at | fmt_date }}</span>
-            <span class="criterion" title="Estimated at list prices from the API usage log">
-                <span class="muted">Cost so far</span> ${{ "%.3f" | format(total_cost) }}
-            </span>
+        <div class="meta-pills">
+            <span class="meta-pill"><span class="meta-label">Sector</span><span class="meta-value">{{ search.target_sector }}</span></span>
+            <span class="meta-pill"><span class="meta-label">Geography</span><span class="meta-value">{{ search.geography }}</span></span>
+            {% if search.criteria %}<span class="meta-pill"><span class="meta-label">Criteria</span><span class="meta-value">{{ search.criteria }}</span></span>{% endif %}
+            {% if search.buyer_brief %}<a class="meta-pill" href="#buyer"><span class="meta-label">Buyer brief</span><span class="meta-value">Given</span></a>{% endif %}
+            <span class="meta-pill"><span class="meta-label">Created</span><span class="meta-value">{{ search.created_at | fmt_date }}</span></span>
+            <span class="meta-pill" title="Estimated at list prices from the API usage log"><span class="meta-label">Cost so far</span><span class="meta-value">${{ "%.3f" | format(total_cost) }}</span></span>
         </div>
     </div>
 </header>
 
-{# ---- Buyer ribbon: plain values; the source is in each value's tooltip ---- #}
-{% macro ribbon_value(code, label) %}
+{# ---- Buyer card: plain values; the source is in each value's tooltip ---- #}
+{% macro buyer_fact(code, label) %}
     {% set f = buyer.fact(code) %}
-    <div class="ribbon-field">
+    <div class="buyer-fact">
         <dt>{{ label }}</dt>
         {% if f %}
             <dd title="Source: {{ f.source_title or f.source_name }}{% if f.period %} · {{ f.period }}{% elif f.as_of %} · as of {{ f.as_of | fmt_date }}{% endif %}">{{ f.value_text }}</dd>
@@ -43,31 +44,35 @@
 {% endmacro %}
 
 {% set b = buyer.company %}
-<section class="buyer-ribbon" id="buyer">
-    <div class="ribbon-head">
-        <span class="ribbon-label">Buyer:</span>
-        <strong class="ribbon-name">{{ b.name }}</strong>
-        {% set desc = buyer.fact("description") %}
-        {% if desc %}<span class="ribbon-desc" title="{{ desc.value_text }}">{{ desc.value_text | truncate(150) }}</span>{% endif %}
-        <a class="small ribbon-link" href="{{ url_for('show_buyer', company_id=b.id) }}">Full profile →</a>
-    </div>
-    <dl class="ribbon-fields">
-        <div class="ribbon-field">
-            <dt>Website</dt>
-            {% set site = b.website | external_url %}
-            <dd>{% if site %}<a href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ b.domain or b.website }} ↗</a>{% else %}<span class="muted">No evidence</span>{% endif %}</dd>
+{% set words = b.name.split() %}
+<section class="buyer-card" id="buyer" aria-label="Buyer">
+    <a class="btn btn-sm buyer-profile-link" href="{{ url_for('show_buyer', company_id=b.id) }}">View full profile →</a>
+    <div class="buyer-main">
+        <div class="buyer-identity">
+            <span class="buyer-avatar" aria-hidden="true">{{ (words[0][0] ~ words[1][0]) | upper if words | length > 1 else b.name[:2] | upper }}</span>
+            <div>
+                <p class="eyebrow">Buyer</p>
+                <h2 class="buyer-name">{{ b.name }}</h2>
+                {% set desc = buyer.fact("description") %}
+                {% if desc %}<p class="buyer-desc" title="{{ desc.value_text }}">{{ desc.value_text }}</p>{% endif %}
+                {% set site = b.website | external_url %}
+                {% if site %}<a href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ site }} ↗</a>{% else %}<span class="muted small">No website on file</span>{% endif %}
+            </div>
         </div>
-        {% for scheme, row in buyer.identifiers.items() %}
-            <div class="ribbon-field"><dt>{{ vocab.IDENTIFIER_SCHEMES[scheme] }}</dt><dd>{{ row.value }}</dd></div>
-        {% endfor %}
-        {{ ribbon_value("headquarters", "Headquarters") }}
-        {{ ribbon_value("revenue", "Revenue") }}
-        {{ ribbon_value("market_cap", "Market cap") }}
-        {{ ribbon_value("employee_count", "Employees") }}
-    </dl>
-    {% if search.buyer_brief %}
-        <div class="ribbon-brief">
-            <span class="ribbon-label">Brief:</span> <span class="brief-inline">{{ search.buyer_brief }}</span>
+        <dl class="buyer-facts">
+            {% for scheme, row in buyer.identifiers.items() %}
+                <div class="buyer-fact"><dt>{{ vocab.IDENTIFIER_SCHEMES[scheme] }}</dt><dd>{{ row.value }}</dd></div>
+            {% endfor %}
+            {{ buyer_fact("headquarters", "Headquarters") }}
+            {{ buyer_fact("revenue", "Revenue") }}
+            {{ buyer_fact("market_cap", "Market cap") }}
+            {{ buyer_fact("employee_count", "Employees") }}
+        </dl>
+    </div>
+    <div class="buyer-foot">
+        {% if search.buyer_brief %}
+            <span class="eyebrow">Brief</span>
+            <span class="brief-inline">{{ search.buyer_brief }}</span>
             <details class="inline-details">
                 <summary>Edit</summary>
                 <form class="form override-form" method="post" action="{{ url_for('update_brief', search_id=search.id) }}">
@@ -75,24 +80,24 @@
                     <button class="btn" type="submit">Save brief</button>
                 </form>
             </details>
-        </div>
-    {% else %}
-        <details class="inline-details ribbon-add-brief">
-            <summary>+ Add brief</summary>
-            <form class="form override-form" method="post" action="{{ url_for('update_brief', search_id=search.id) }}">
-                <textarea name="buyer_brief" rows="3" placeholder="{{ brief_example }}"></textarea>
-                <button class="btn" type="submit">Save brief</button>
-            </form>
-        </details>
-    {% endif %}
-    {% if stale_assessments and not running %}
-        <div class="ribbon-stale">
-            The brief changed after {{ stale_assessments }} assessment{{ "s were" if stale_assessments != 1 else " was" }} made.
-            <form class="inline-form" method="post" action="{{ url_for('reassess_candidates', search_id=search.id) }}">
-                <button class="btn btn-sm" type="submit" title="Assessment only, no new research: about 5 cents each">Re-assess with the new brief</button>
-            </form>
-        </div>
-    {% endif %}
+        {% else %}
+            <details class="inline-details">
+                <summary>+ Add brief</summary>
+                <form class="form override-form" method="post" action="{{ url_for('update_brief', search_id=search.id) }}">
+                    <textarea name="buyer_brief" rows="3" placeholder="{{ brief_example }}"></textarea>
+                    <button class="btn" type="submit">Save brief</button>
+                </form>
+            </details>
+        {% endif %}
+        {% if stale_assessments and not running %}
+            <div class="buyer-stale">
+                The brief changed after {{ stale_assessments }} assessment{{ "s were" if stale_assessments != 1 else " was" }} made.
+                <form class="inline-form" method="post" action="{{ url_for('reassess_candidates', search_id=search.id) }}">
+                    <button class="btn btn-sm" type="submit" title="Assessment only, no new research: about 5 cents each">Re-assess with the new brief</button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
 </section>
 
 {# ---- Job status ---- #}
@@ -111,33 +116,47 @@
     </div>
 {% endif %}
 
+{# ---- Workflow stages: done = green, active = blue, future = grey ---- #}
+{% set screened_count = profiles | selectattr("company.screened_at") | list | length %}
+{% set discovery_done = search.status in ("screening", "complete") or (search.status == "failed" and profiles) %}
+{% set screening_done = search.status == "complete" and screened_count and not unscreened %}
+{% set reviewing = search.status == "complete" and screened_count %}
+{% macro stage(num, name, state, css, icon) %}
+    <li class="stage {{ css }}">
+        <span class="stage-icon" aria-hidden="true">
+            {% if css == "stage-done" %}<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            {% elif icon == "search" %}<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg>
+            {% elif icon == "doc" %}<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>
+            {% elif icon == "list" %}<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
+            {% elif icon == "flask" %}<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></svg>
+            {% else %}<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg>{% endif %}
+        </span>
+        <span class="stage-text">
+            <span class="stage-name"><span class="stage-num">0{{ num }}</span>{{ name }}</span>
+            <span class="stage-state">{{ state }}</span>
+        </span>
+    </li>
+{% endmacro %}
+{% if running and not discovery_done %}{% set s2 = search.status_message or "Running" %}
+{% elif search.status == "failed" and not profiles %}{% set s2 = "Failed" %}
+{% else %}{% set s2 = (profiles | length) ~ " candidates · " ~ (filtered | length) ~ " filtered out" %}{% endif %}
+{% if search.status == "screening" %}{% set s3 = search.status_message or "Running" %}
+{% elif search.status in ("queued", "discovering") %}{% set s3 = "Waits for discovery" %}
+{% else %}{% set s3 = screened_count ~ " assessed" ~ ((" · " ~ unscreened ~ " not yet") if unscreened else "") %}{% endif %}
 <ol class="pipeline" aria-label="Research pipeline">
-    <li class="stage stage-done"><span class="stage-name">Search defined</span><span class="stage-state">Complete</span></li>
-    <li class="stage {{ 'stage-done' if search.status == 'complete' }}">
-        <span class="stage-name">Target discovery</span>
-        <span class="stage-state">
-            {% if running %}{{ search.status_message or "Running" }}
-            {% elif search.status == "failed" %}Failed
-            {% else %}{{ profiles | length }} candidates · {{ filtered | length }} filtered out{% endif %}
-        </span>
-    </li>
-    {% set screened_count = profiles | selectattr("company.screened_at") | list | length %}
-    <li class="stage {{ 'stage-done' if search.status == 'complete' and screened_count }}">
-        <span class="stage-name">Screening &amp; assessment</span>
-        <span class="stage-state">
-            {% if search.status == "screening" %}{{ search.status_message or "Running" }}
-            {% elif search.status in ("queued", "discovering") %}Waits for discovery
-            {% else %}{{ screened_count }} assessed{% if unscreened %} · {{ unscreened }} not yet{% endif %}{% endif %}
-        </span>
-    </li>
-    <li class="stage"><span class="stage-name">Your review</span><span class="stage-state">Shortlist ☆ or dismiss ✕</span></li>
-    <li class="stage"><span class="stage-name">Deep research</span><span class="stage-state">On request, per company</span></li>
+    {{ stage(1, "Search defined", "Complete", "stage-done", "check") }}
+    {{ stage(2, "Target discovery", s2, "stage-done" if discovery_done else ("stage-active" if running else ""), "search") }}
+    {{ stage(3, "Screening & assessment", s3, "stage-done" if screening_done else ("stage-active" if search.status == "screening" or reviewing else ""), "doc") }}
+    {{ stage(4, "Your review", "Shortlist or dismiss", "stage-active" if reviewing else "", "list") }}
+    {{ stage(5, "Deep research", "On request, per company", "", "flask") }}
 </ol>
 
-<div class="candidates-wrap">
-    <section class="panel">
-        <div class="panel-head">
-            <h2>Candidates</h2>
+<section class="panel table-card" id="candidates">
+        <div class="table-card-head">
+            <div>
+                <h2>Candidates</h2>
+                <p class="hint"><strong>Search match</strong> = fits the sector and geography you asked for. <strong>Buyer fit</strong> = Claude's assessment of whether it's a good acquisition for {{ search.buyer_name }}, from the cited evidence.</p>
+            </div>
             <div class="head-actions">
                 <span class="muted">{{ profiles | length }} shown</span>
                 {% if unscreened and not running %}
@@ -148,7 +167,6 @@
                 {% endif %}
             </div>
         </div>
-        <p class="hint panel-hint"><strong>Search match</strong> = fits the sector and geography you asked for. <strong>Buyer fit</strong> = Claude's assessment of whether it's a good acquisition for {{ search.buyer_name }}, from the cited evidence.</p>
         {% if profiles %}
             {{ ui.discovery_table(profiles, search, assessments, headlines) }}
         {% elif running %}
@@ -156,6 +174,8 @@
         {% else %}
             {{ ui.empty_state("No candidates found. Try a broader sector or geography, or run the search again.") }}
         {% endif %}
+
+        <div class="table-card-foot">
 
         {% if filtered %}
             <details class="panel-inset filtered">
@@ -243,9 +263,8 @@
                 </div>
             </div>
         </details>
-    </section>
-
-</div>
+        </div>
+</section>
 <script>
     document.querySelectorAll("button[data-busy]").forEach(function (btn) {
         btn.form.addEventListener("submit", function () {

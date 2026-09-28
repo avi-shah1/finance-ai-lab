@@ -3,21 +3,25 @@
 
 {% block title %}{{ profile.company.name }} · Buyer profile{% endblock %}
 
+{% block nav %}searches{% endblock %}
+
 {% block content %}
 {% set c = profile.company %}
-<nav class="crumbs"><a href="{{ url_for('home') }}#searches">Searches</a> / {{ c.name }}</nav>
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a href="{{ url_for('home') }}#searches">Searches</a><span class="sep" aria-hidden="true">›</span><span>Buyer profile</span>
+</nav>
 
 <header class="page-head">
     <div>
-        <p class="eyebrow">Buyer profile</p>
         <h1>{{ c.name }}</h1>
-        <div class="criteria">
+        <div class="meta-pills">
+            <span class="meta-pill"><span class="meta-label">Role</span><span class="meta-value">Buyer</span></span>
             {% set href = c.website | external_url %}
-            {% if href %}<a class="criterion" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ c.website }} ↗</a>{% endif %}
+            {% if href %}<a class="meta-pill" href="{{ href }}" target="_blank" rel="noopener noreferrer"><span class="meta-label">Website</span><span class="meta-value">{{ c.domain or c.website }} ↗</span></a>{% endif %}
             {% for scheme, row in profile.identifiers.items() %}
-                <span class="criterion" title="{{ vocab.MATCH_METHODS[row.match_method] }}"><span class="muted">{{ vocab.IDENTIFIER_SCHEMES[scheme] }}</span> {{ row.value }}</span>
+                <span class="meta-pill" title="{{ vocab.MATCH_METHODS[row.match_method] }}"><span class="meta-label">{{ vocab.IDENTIFIER_SCHEMES[scheme] }}</span><span class="meta-value">{{ row.value }}</span></span>
             {% endfor %}
-            <a class="criterion" href="{{ url_for('show_company', company_id=c.id) }}">Full company record →</a>
+            <a class="meta-pill" href="{{ url_for('show_company', company_id=c.id) }}"><span class="meta-value">Full company record →</span></a>
         </div>
     </div>
     <div class="head-side">
