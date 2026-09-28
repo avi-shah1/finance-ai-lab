@@ -26,6 +26,72 @@
     </div>
 </header>
 
+{# ---- Buyer ribbon: plain values; the source is in each value's tooltip ---- #}
+{% macro ribbon_value(code, label) %}
+    {% set f = buyer.fact(code) %}
+    <div class="ribbon-field">
+        <dt>{{ label }}</dt>
+        {% if f %}
+            <dd title="Source: {{ f.source_title or f.source_name }}{% if f.period %} · {{ f.period }}{% elif f.as_of %} · as of {{ f.as_of | fmt_date }}{% endif %}">{{ f.value_text }}</dd>
+        {% else %}
+            <dd class="muted">{{ "No evidence" if buyer.has_research else "Not profiled yet" }}</dd>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{% set b = buyer.company %}
+<section class="buyer-ribbon" id="buyer">
+    <div class="ribbon-head">
+        <span class="ribbon-label">Buyer:</span>
+        <strong class="ribbon-name">{{ b.name }}</strong>
+        {% set desc = buyer.fact("description") %}
+        {% if desc %}<span class="ribbon-desc" title="{{ desc.value_text }}">{{ desc.value_text | truncate(150) }}</span>{% endif %}
+        <a class="small ribbon-link" href="{{ url_for('show_buyer', company_id=b.id) }}">Full profile →</a>
+    </div>
+    <dl class="ribbon-fields">
+        <div class="ribbon-field">
+            <dt>Website</dt>
+            {% set site = b.website | external_url %}
+            <dd>{% if site %}<a href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ b.domain or b.website }} ↗</a>{% else %}<span class="muted">No evidence</span>{% endif %}</dd>
+        </div>
+        {% for scheme, row in buyer.identifiers.items() %}
+            <div class="ribbon-field"><dt>{{ vocab.IDENTIFIER_SCHEMES[scheme] }}</dt><dd>{{ row.value }}</dd></div>
+        {% endfor %}
+        {{ ribbon_value("headquarters", "Headquarters") }}
+        {{ ribbon_value("revenue", "Revenue") }}
+        {{ ribbon_value("market_cap", "Market cap") }}
+        {{ ribbon_value("employee_count", "Employees") }}
+    </dl>
+    {% if search.buyer_brief %}
+        <div class="ribbon-brief">
+            <span class="ribbon-label">Brief:</span> <span class="brief-inline">{{ search.buyer_brief }}</span>
+            <details class="inline-details">
+                <summary>Edit</summary>
+                <form class="form override-form" method="post" action="{{ url_for('update_brief', search_id=search.id) }}">
+                    <textarea name="buyer_brief" rows="3" placeholder="{{ brief_example }}">{{ search.buyer_brief }}</textarea>
+                    <button class="btn" type="submit">Save brief</button>
+                </form>
+            </details>
+        </div>
+    {% else %}
+        <details class="inline-details ribbon-add-brief">
+            <summary>+ Add brief</summary>
+            <form class="form override-form" method="post" action="{{ url_for('update_brief', search_id=search.id) }}">
+                <textarea name="buyer_brief" rows="3" placeholder="{{ brief_example }}"></textarea>
+                <button class="btn" type="submit">Save brief</button>
+            </form>
+        </details>
+    {% endif %}
+    {% if stale_assessments and not running %}
+        <div class="ribbon-stale">
+            The brief changed after {{ stale_assessments }} assessment{{ "s were" if stale_assessments != 1 else " was" }} made.
+            <form class="inline-form" method="post" action="{{ url_for('reassess_candidates', search_id=search.id) }}">
+                <button class="btn btn-sm" type="submit" title="Assessment only, no new research: about 5 cents each">Re-assess with the new brief</button>
+            </form>
+        </div>
+    {% endif %}
+</section>
+
 {# ---- Job status ---- #}
 {% if running %}
     <div class="notice notice-running" role="status">
@@ -65,7 +131,7 @@
     <li class="stage"><span class="stage-name">Deep research</span><span class="stage-state">On request, per company</span></li>
 </ol>
 
-<div class="layout-split">
+<div class="candidates-wrap">
     <section class="panel">
         <div class="panel-head">
             <h2>Candidates</h2>
@@ -176,65 +242,6 @@
         </details>
     </section>
 
-    <aside class="panel buyer-card" id="buyer">
-        <div class="panel-head">
-            <h2>Who we think the buyer is</h2>
-            <a href="{{ url_for('show_buyer', company_id=buyer.company.id) }}">Open →</a>
-        </div>
-        {% set b = buyer.company %}
-        <h3 class="buyer-name">{{ b.name }}</h3>
-        <p class="hint buyer-check">Check this is the right company: every assessment compares targets with it.</p>
-        {% set desc = buyer.fact("description") %}
-        {% if desc %}<p class="buyer-desc">{{ desc.value_text | truncate(220) }}</p>{% endif %}
-        <div class="criteria buyer-ids">
-            {% set site = b.website | external_url %}
-            {% if site %}<a class="criterion" href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ b.domain or b.website }} ↗</a>
-            {% else %}<span class="criterion muted" title="Without a website the buyer's products and customers can't be read. Add it on the buyer page.">No website</span>{% endif %}
-            {% for scheme, row in buyer.identifiers.items() %}
-                <span class="criterion" title="{{ vocab.MATCH_METHODS[row.match_method] }}">
-                    <span class="muted">{{ vocab.IDENTIFIER_SCHEMES[scheme] }}</span> {{ row.value }}{% if row.match_method == "auto_exact_name" %} <span class="warn-mark" title="Matched automatically by name: please confirm">?</span>{% endif %}
-                </span>
-            {% endfor %}
-        </div>
-        {% if not buyer.has_research %}
-            {{ ui.empty_state("Not profiled yet: this happens when screening starts.") }}
-        {% endif %}
-        <dl class="fields">
-            {{ ui.fact_field(buyer, "headquarters", "Headquarters") }}
-            {{ ui.fact_field(buyer, "revenue", "Revenue") }}
-            {{ ui.fact_field(buyer, "market_cap", "Market cap") }}
-            {{ ui.fact_field(buyer, "employee_count", "Employees") }}
-        </dl>
-        {% set offer = buyer.all("product", "capability") %}
-        {% if offer %}
-            <h3 class="subhead">What it sells ({{ offer | length }})</h3>
-            {{ ui.fact_chips(offer[:8], "") }}
-        {% endif %}
-
-        <h3 class="subhead">Buyer brief <span class="optional">(optional)</span></h3>
-        {% if search.buyer_brief %}
-            <p class="brief-text">{{ search.buyer_brief }}</p>
-        {% else %}
-            <p class="muted small">No brief. Claude judges fit from public information only. A brief (the buyer's strategy and what it wants) usually sharpens strategic fit, especially for private buyers.</p>
-        {% endif %}
-        {% if stale_assessments %}
-            <div class="notice">
-                The brief changed after {{ stale_assessments }} assessment{{ "s were" if stale_assessments != 1 else " was" }} made.
-                {% if not running %}
-                    <form method="post" action="{{ url_for('reassess_candidates', search_id=search.id) }}">
-                        <button class="btn btn-sm" type="submit" title="Assessment only, no new research: about 4 cents each">Re-assess with the new brief</button>
-                    </form>
-                {% endif %}
-            </div>
-        {% endif %}
-        <details class="override">
-            <summary>{{ "Edit brief" if search.buyer_brief else "Add a brief" }}</summary>
-            <form class="form override-form" method="post" action="{{ url_for('update_brief', search_id=search.id) }}">
-                <textarea name="buyer_brief" rows="4" placeholder="{{ brief_example }}">{{ search.buyer_brief or "" }}</textarea>
-                <button class="btn" type="submit">Save brief</button>
-            </form>
-        </details>
-    </aside>
 </div>
 <script>
     document.querySelectorAll("button[data-busy]").forEach(function (btn) {

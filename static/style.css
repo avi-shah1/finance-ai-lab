@@ -587,6 +587,29 @@ a.cite:hover { color: var(--text); text-decoration: none; }
 .verdict-cell { min-width: 190px; }
 .verdict-line { margin: 0.35rem 0 0; font-size: 0.8rem; color: var(--muted); max-width: 260px; line-height: 1.4; }
 
+/* Buyer ribbon (search page) */
+.buyer-ribbon {
+    display: flex; flex-direction: column; gap: 0.6rem;
+    margin: 0 0 1rem; padding: 0.85rem 1.1rem;
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm); background: var(--panel);
+}
+.ribbon-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.6rem; }
+.ribbon-label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.ribbon-name { font-size: 1.05rem; }
+.ribbon-desc { color: var(--muted); font-size: 0.88rem; flex: 1 1 320px; }
+.ribbon-link { margin-left: auto; }
+.ribbon-fields { display: flex; flex-wrap: wrap; gap: 0.5rem 1.8rem; margin: 0; }
+.ribbon-field dt { color: var(--faint); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.ribbon-field dd { margin: 0.1rem 0 0; font-size: 0.92rem; }
+.ribbon-field dd[title] { cursor: help; }
+.ribbon-brief { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.6rem; }
+.brief-inline { font-size: 0.9rem; white-space: pre-line; }
+.inline-details summary { cursor: pointer; color: var(--muted); font-size: 0.82rem; }
+.ribbon-add-brief { align-self: flex-start; }
+.ribbon-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; color: var(--amber); font-size: 0.85rem; }
+.ribbon-stale .btn-sm { margin-top: 0; }
+
 .buyer-check { margin: -0.4rem 0 0; }
 .buyer-desc { margin: 0; color: var(--muted); font-size: 0.88rem; }
 .buyer-ids { margin-top: 0; }
