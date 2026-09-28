@@ -173,6 +173,7 @@ OVERALL_VIEWS = {
 DIMENSIONS = [
     {
         "code": "strategic_fit",
+        "short": "Strategic",          # label in the results table
         "label": "Strategic fit",
         "criteria": {
             "product_adjacency": "Product adjacency",
@@ -187,6 +188,7 @@ DIMENSIONS = [
     },
     {
         "code": "commercial_attractiveness",
+        "short": "Commercial",          # label in the results table
         "label": "Commercial attractiveness",
         "criteria": {
             "financial_scale": "Financial scale",
@@ -199,6 +201,7 @@ DIMENSIONS = [
     },
     {
         "code": "transaction_feasibility",
+        "short": "Feasibility",          # label in the results table
         "label": "Transaction feasibility",
         "criteria": {
             "relative_size": "Relative size compared with buyer",
@@ -213,6 +216,7 @@ DIMENSIONS = [
     },
     {
         "code": "momentum_timing",
+        "short": "Momentum",          # label in the results table
         "label": "Momentum / timing",
         "criteria": {
             "hiring": "Hiring",

@@ -685,7 +685,7 @@
                 {% for d in vocab.DIMENSIONS %}
                     {% set r = a.get((d.code, None)) %}
                     <li title="{{ d.label }}: {{ vocab.DIMENSION_RATINGS[r.rating] if r else 'Not assessed' }}">
-                        <span class="dim-dot rating-{{ r.rating if r else 'none' }}"></span>{{ d.label.split(" ")[0] }}
+                        <span class="dim-dot rating-{{ r.rating if r else 'none' }}"></span>{{ d.short }}
                     </li>
                 {% endfor %}
             </ul>
