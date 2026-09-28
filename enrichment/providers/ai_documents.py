@@ -151,7 +151,8 @@ class AIDocuments(Provider):
                 + (f"Expected period end (from the filing record): {src['period_end']}\n" if src.get("period_end") else "")
                 + "Extract the figures described by the schema. Return null for any figure not explicitly printed.")},
         ]
-        parsed, meta = llm.extract(SYSTEM, content, AccountsExtraction)
+        parsed, meta = llm.extract(SYSTEM, content, AccountsExtraction, task="deep_documents",
+                                   company_id=ctx.company.get("id"))
         facts, rejected = self._to_facts(parsed, src, page_texts, mapping, meta["model"])
         notes = " ".join(n for n in (parsed.notes, scope_note) if n) or None
         return facts, rejected, meta, notes

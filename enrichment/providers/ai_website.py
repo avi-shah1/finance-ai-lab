@@ -70,7 +70,8 @@ class AIWebsite(Provider):
         content = [{"type": "text", "text": (
             f"Company: {ctx.company['name']}\n\nWebsite pages:\n\n" + "\n\n".join(blocks)
             + "\n\nExtract the facts described by the schema.")}]
-        parsed, meta = llm.extract(SYSTEM, content, WebsiteExtraction)
+        parsed, meta = llm.extract(SYSTEM, content, WebsiteExtraction, task="deep_website",
+                                   company_id=ctx.company.get("id"))
 
         by_url = {p["url"]: p for p in pages}
         facts_by_source = {p["id"]: [] for p in pages if p["url"] in texts}

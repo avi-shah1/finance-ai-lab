@@ -370,6 +370,44 @@ def remove_candidate(search_id, company_id):
 
 
 # ---------------------------------------------------------------------------
+# API usage and cost (written through usage.py)
+# ---------------------------------------------------------------------------
+
+def insert_api_usage(row):
+    with cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO api_usage (service, task, model, input_tokens, output_tokens,
+                                   cache_read_tokens, cache_write_tokens, units, cost_usd,
+                                   search_id, company_id, request_id)
+            VALUES (%(service)s, %(task)s, %(model)s, %(input_tokens)s, %(output_tokens)s,
+                    %(cache_read_tokens)s, %(cache_write_tokens)s, %(units)s, %(cost_usd)s,
+                    %(search_id)s, %(company_id)s, %(request_id)s);
+            """,
+            row,
+        )
+
+
+def get_usage_summary(search_id=None, company_id=None):
+    """Estimated spend per service and task, for one search or one company."""
+    column, value = ("search_id", search_id) if search_id is not None else ("company_id", company_id)
+    with cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT service, task, count(*) AS calls, sum(units) AS units,
+                   sum(input_tokens) AS input_tokens, sum(output_tokens) AS output_tokens,
+                   sum(cost_usd) AS cost_usd
+            FROM api_usage
+            WHERE {column} = %s
+            GROUP BY service, task
+            ORDER BY sum(cost_usd) DESC NULLS LAST;
+            """,
+            (value,),
+        )
+        return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
 # Assessments (read-only for now: nothing creates them yet)
 # ---------------------------------------------------------------------------
 
