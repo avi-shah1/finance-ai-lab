@@ -998,3 +998,13 @@ button:disabled { opacity: 0.7; cursor: progress; }
     }
     .company-table .actions { position: absolute; top: 0.6rem; right: 0.5rem; width: auto; }
 }
+
+/* More breathing room between boxes in Financials, Ownership & governance and Hiring */
+#financials .evidence-list, #ownership .evidence-list, #hiring .evidence-list { gap: 1rem; }
+#financials .evidence-list li, #ownership .evidence-list li, #hiring .evidence-list li { padding: 0.85rem 1rem; }
+#ownership .chip-list, #hiring .chip-list { gap: 0.6rem; }
+#ownership .fields-grid { gap: 1.4rem 2rem; margin-top: 1.4rem; }
+#financials .fin-table th, #financials .fin-table td { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+#financials .subhead, #ownership .subhead, #hiring .subhead { margin-top: 1.4rem; }
+#financials .subhead:first-child, #ownership .subhead:first-of-type, #hiring .subhead:first-child { margin-top: 0.4rem; }
+#hiring .timeline { gap: 1.4rem; }
