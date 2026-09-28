@@ -24,7 +24,6 @@
             {% set href = c.website | external_url %}
             {% if href %}<a class="criterion" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ c.website }} ↗</a>{% endif %}
             <span class="criterion"><span class="muted">HQ</span> {{ c.hq_country or "Unknown" }}</span>
-            <span class="criterion"><span class="muted">Sector</span> {{ c.sector or "Unknown" }}</span>
             {% for scheme, row in profile.identifiers.items() %}
                 <span class="criterion" title="{{ vocab.MATCH_METHODS[row.match_method] }}"><span class="muted">{{ vocab.IDENTIFIER_SCHEMES[scheme] }}</span> {{ row.value }}</span>
             {% endfor %}

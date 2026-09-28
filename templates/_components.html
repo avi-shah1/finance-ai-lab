@@ -426,7 +426,6 @@
                 <div class="grid-3">
                     <label>Website <input type="text" name="website" value="{{ c.website or '' }}" placeholder="example.com"></label>
                     <label>HQ country <input type="text" name="hq_country" value="{{ c.hq_country or '' }}" placeholder="e.g. UK"></label>
-                    <label>Sector <input type="text" name="sector" value="{{ c.sector or '' }}"></label>
                     {% for scheme, label in vocab.IDENTIFIER_SCHEMES.items() %}
                         {% set row = profile.identifiers.get(scheme) %}
                         <label>{{ label }}
@@ -525,7 +524,6 @@
                     <tr>
                         <td data-label="Company">
                             <a class="company-link" href="{{ link }}">{{ c.name }}</a>
-                            {% if c.sector %}<div class="muted small">{{ c.sector }}</div>{% endif %}
                         </td>
                         {% if library %}
                             <td data-label="Research">
@@ -841,9 +839,6 @@
             </label>
             <label>HQ country
                 <input type="text" name="hq_country" placeholder="e.g. UK">
-            </label>
-            <label>Sector
-                <input type="text" name="sector">
             </label>
         </div>
         <p class="hint">Add the website and HQ country so research can find the right sources. You can add a company number or ticker on the company page. Optional facts below: only fill in what you have evidence for.</p>

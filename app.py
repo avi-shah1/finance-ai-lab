@@ -519,7 +519,7 @@ def update_identifiers(company_id):
     """Identity details that tell the providers exactly which company to
     research. Entered values are trusted over automatic name matches."""
     back = _next_url(url_for("show_company", company_id=company_id))
-    database.get_company(company_id) or abort(404)
+    company = database.get_company(company_id) or abort(404)
 
     number = (_text("companies_house") or "").upper().replace(" ", "")
     if number and not re.fullmatch(r"[A-Z0-9]{8}|\d{1,8}", number):
@@ -536,7 +536,8 @@ def update_identifiers(company_id):
     if website and external_url(website) is None:
         return form_error_redirect("Website should look like example.com or https://example.com.", back)
 
-    database.update_company_identity(company_id, website, _text("hq_country"), _text("sector"))
+    # The sector field is no longer shown, so keep whatever is stored.
+    database.update_company_identity(company_id, website, _text("hq_country"), company["sector"])
     database.set_identifier(company_id, "companies_house", number)
     database.set_identifier(company_id, "sec_cik", cik)
     database.set_identifier(company_id, "ticker", ticker)
