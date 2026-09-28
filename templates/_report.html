@@ -157,7 +157,6 @@
                 <div class="chips">{{ row_chips(ai_overall) }}</div>
             </details>
         {% endif %}
-        {{ ui.override_form(search, c, "overall", None, vocab.OVERALL_VIEWS, request.full_path) }}
     {% endif %}
 </section>
 
@@ -207,7 +206,6 @@
                     {{ ui.cited_evidence(ai_dim, facts_by_id, events_by_id, c) }}
                 </details>
             {% endif %}
-            {{ ui.override_form(search, c, d.code, None, vocab.DIMENSION_RATINGS, request.full_path) }}
         </section>
     {% endfor %}
 {% endif %}
