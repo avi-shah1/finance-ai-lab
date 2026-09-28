@@ -61,11 +61,6 @@
             </div>
             {% if ai_overall %}
                 <p class="headline">{{ ai_overall.headline or ai_overall.rationale | truncate(220) }}</p>
-                <p class="muted small">
-                    AI draft by {{ ai_overall.model }} on {{ ai_overall.created_at | fmt_date }}, from the cited evidence only
-                    {%- if ai_overall.cites_brief %} and your buyer brief{% endif %}.
-                    {% if not ai_overall.headline %}Re-assess for the full report layout.{% endif %}
-                </p>
             {% elif ai_assessment %}
                 <p class="headline">No dimension had cited evidence behind it, so there is no overall view yet.</p>
             {% elif candidate and candidate.screening_error %}

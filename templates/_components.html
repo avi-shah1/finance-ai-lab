@@ -708,18 +708,6 @@
     </form>
 {% endmacro %}
 
-{# "AI draft by <model>", plus the analyst's override when there is one. #}
-{% macro ai_draft(ai_row, current, overall=false) %}
-    <div class="ai-draft">
-        <span class="ev ev-ai">AI draft</span>
-        {{ rating_chip(ai_row, overall=overall) }}
-        <span class="muted small">by {{ ai_row.model }} · {{ ai_row.created_at | fmt_date }}</span>
-        {% if current and current.assessed_by == "analyst" %}
-            <span class="override-note">Overridden by you: {{ rating_chip(current, overall=overall) }} “{{ current.rationale }}”</span>
-        {% endif %}
-    </div>
-{% endmacro %}
-
 {# The evidence an AI assessment cites, each with its source. Evidence about
    the buyer (e.g. its products) is labelled as such. #}
 {% macro cited_evidence(row, facts_by_id, events_by_id, company) %}
