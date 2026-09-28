@@ -148,7 +148,7 @@
                 {% endif %}
             </div>
         </div>
-        <p class="hint panel-hint">Ratings are Claude's drafts from the cited evidence; open a company to see the reasoning and sources, or to override a rating.</p>
+        <p class="hint panel-hint"><strong>Search match</strong> = fits the sector and geography you asked for. <strong>Buyer fit</strong> = Claude's assessment of whether it's a good acquisition for {{ search.buyer_name }}, from the cited evidence. Open a report to see the reasoning and sources, or to override a rating.</p>
         {% if profiles %}
             {{ ui.discovery_table(profiles, search, assessments, headlines) }}
         {% elif running %}

@@ -606,8 +606,8 @@
                     <th>What they do</th>
                     <th>Location</th>
                     <th>Size</th>
-                    <th>Why it matched</th>
-                    <th>Screening view</th>
+                    <th>Matches your search?</th>
+                    <th>Fit for {{ search.buyer_name }}</th>
                     <th>Evidence</th>
                     <th><span class="sr-only">Actions</span></th>
                 </tr>
@@ -636,11 +636,11 @@
                             {% if founded %}<div class="muted small size-note">Founded {{ founded.value_text }}</div>{% endif %}
                             {% if not emp and not rev %}{{ unknown("No evidence") }}{% endif %}
                         </td>
-                        <td data-label="Why it matched" class="desc">
-                            {% if c.relevance %}<span class="relevance relevance-{{ c.relevance }}">{{ c.relevance | capitalize }} relevance</span>{% endif %}
+                        <td data-label="Matches your search?" class="desc">
+                            {% if c.relevance %}<span class="relevance relevance-{{ c.relevance }}">{{ {"high": "Strong", "medium": "Medium", "low": "Weak"}[c.relevance] }} match</span>{% endif %}
                             {{ c.match_reason or "" }}
                         </td>
-                        <td data-label="Screening view" class="verdict-cell">
+                        <td data-label="Fit for {{ search.buyer_name }}" class="verdict-cell">
                             {{ screening_summary(c, assessments.get(c.id, {}), search) }}
                             {% set h = headlines.get(c.id) %}
                             {% if h and (h.headline or h.rationale) %}
