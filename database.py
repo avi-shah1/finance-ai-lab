@@ -252,6 +252,44 @@ def get_facts_for(company_ids):
     return grouped
 
 
+def get_facts_by_id(fact_ids):
+    """{fact_id: fact row with source details} for cited evidence."""
+    if not fact_ids:
+        return {}
+    with cursor(readonly=True) as cur:
+        cur.execute(
+            f"""
+            SELECT f.*, ft.label, ft.category, ft.value_kind, ft.multi_valued, c.name AS company_name,
+                   {_SOURCE_COLUMNS}
+            FROM facts f
+            JOIN fact_types ft ON ft.code = f.fact_type
+            JOIN sources s ON s.id = f.source_id
+            JOIN companies c ON c.id = f.company_id
+            WHERE f.id = ANY(%s);
+            """,
+            (list(fact_ids),),
+        )
+        return {r["id"]: r for r in cur.fetchall()}
+
+
+def get_events_by_id(event_ids):
+    """{event_id: event row with source details} for cited evidence."""
+    if not event_ids:
+        return {}
+    with cursor(readonly=True) as cur:
+        cur.execute(
+            f"""
+            SELECT e.*, c.name AS company_name, {_SOURCE_COLUMNS}
+            FROM events e
+            JOIN sources s ON s.id = e.source_id
+            JOIN companies c ON c.id = e.company_id
+            WHERE e.id = ANY(%s);
+            """,
+            (list(event_ids),),
+        )
+        return {r["id"]: r for r in cur.fetchall()}
+
+
 def get_events_for(company_ids):
     """Return {company_id: [event, ...]} newest first, with source details."""
     if not company_ids:
@@ -326,6 +364,36 @@ def set_identifier(company_id, scheme, value):
         else:
             cur.execute("DELETE FROM company_identifiers WHERE company_id = %s AND scheme = %s;",
                         (company_id, scheme))
+
+
+def set_website_if_missing(company_id, website):
+    """Record a company's website (and domain) unless one is already set."""
+    domain = normalise_domain(website)
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE companies
+            SET website = %(website)s,
+                domain = CASE WHEN EXISTS (SELECT 1 FROM companies o WHERE o.domain = %(domain)s AND o.id <> %(id)s)
+                              THEN domain ELSE %(domain)s END
+            WHERE id = %(id)s AND coalesce(website, '') = '';
+            """,
+            {"website": website, "domain": domain, "id": company_id},
+        )
+
+
+def set_derived_identifier(company_id, scheme, value):
+    """Record an identifier read from another source (e.g. a company number
+    printed on the company's website). Never replaces an existing one."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO company_identifiers (company_id, scheme, value, match_method)
+            VALUES (%s, %s, %s, 'derived')
+            ON CONFLICT (company_id, scheme) DO NOTHING;
+            """,
+            (company_id, scheme, value),
+        )
 
 
 def update_company_identity(company_id, website, hq_country, sector):
@@ -457,6 +525,23 @@ def upsert_discovered_companies(rows):
             fetch=True,
         )
         return {r["domain"]: r["id"] for r in result}
+
+
+def fill_hq_countries(countries):
+    """{company_id: country}: set the HQ country where none is recorded yet
+    (a value entered by the analyst is never replaced)."""
+    if not countries:
+        return
+    with cursor() as cur:
+        execute_values(
+            cur,
+            """
+            UPDATE companies c SET hq_country = v.country
+            FROM (VALUES %s) AS v(id, country)
+            WHERE c.id = v.id AND coalesce(c.hq_country, '') = '';
+            """,
+            list(countries.items()),
+        )
 
 
 def insert_discovery_hits(search_id, rows):
@@ -609,9 +694,107 @@ def get_usage_summary(search_id=None, company_id=None):
         return cur.fetchall()
 
 
+def mark_screened(search_id, company_id, error=None):
+    """Record the outcome of screening a candidate. On success the candidate
+    moves to 'screened' and the company out of the hidden 'discovered' level."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE search_candidates
+            SET screened_at = CASE WHEN %(error)s IS NULL THEN now() ELSE screened_at END,
+                screening_error = %(error)s,
+                stage = CASE WHEN %(error)s IS NULL AND stage = 'discovered' THEN 'screened' ELSE stage END
+            WHERE search_id = %(search_id)s AND company_id = %(company_id)s;
+            """,
+            {"error": error, "search_id": search_id, "company_id": company_id},
+        )
+        if error is None:
+            cur.execute("UPDATE companies SET research_level = 'screened' "
+                        "WHERE id = %s AND research_level = 'discovered';", (company_id,))
+
+
+def set_candidate_stage(search_id, company_id, stage):
+    """Analyst actions: shortlist or dismiss a candidate (or undo)."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE search_candidates
+            SET stage = CASE WHEN %(stage)s = 'undo'
+                             THEN CASE WHEN screened_at IS NULL THEN 'discovered' ELSE 'screened' END
+                             ELSE %(stage)s END
+            WHERE search_id = %(search_id)s AND company_id = %(company_id)s;
+            """,
+            {"stage": stage, "search_id": search_id, "company_id": company_id},
+        )
+
+
 # ---------------------------------------------------------------------------
-# Assessments (read-only for now: nothing creates them yet)
+# Assessments
 # ---------------------------------------------------------------------------
+# Append-only: the newest row per (search, company, dimension, criterion)
+# is the current view, whether written by the AI or the analyst.
+
+def save_ai_assessment(search_id, company_id, model, prompt_version, rows):
+    """Store one AI assessment of a candidate in one transaction. rows:
+    dicts with dimension, criterion, rating, rationale, facts_summary,
+    interpretation, fact_ids, event_ids."""
+    with cursor() as cur:
+        returned = execute_values(
+            cur,
+            """
+            INSERT INTO assessments (search_id, company_id, dimension, criterion, rating, rationale,
+                                     facts_summary, interpretation, assessed_by, model, prompt_version)
+            VALUES %s
+            RETURNING id, dimension, criterion;
+            """,
+            [(search_id, company_id, r["dimension"], r["criterion"], r["rating"], r.get("rationale"),
+              r.get("facts_summary"), r.get("interpretation"), model, prompt_version) for r in rows],
+            template="(%s, %s, %s, %s, %s, %s, %s, %s, 'ai', %s, %s)",
+            fetch=True,
+        )
+        ids = {(r["dimension"], r["criterion"]): r["id"] for r in returned}
+        links = []
+        for r in rows:
+            assessment_id = ids[(r["dimension"], r["criterion"])]
+            links += [(assessment_id, fid, None) for fid in r.get("fact_ids", [])]
+            links += [(assessment_id, None, eid) for eid in r.get("event_ids", [])]
+        if links:
+            execute_values(cur, "INSERT INTO assessment_evidence (assessment_id, fact_id, event_id) VALUES %s;",
+                           links, page_size=1000)
+
+
+def insert_analyst_assessment(search_id, company_id, dimension, criterion, rating, rationale):
+    """An analyst override. It becomes the current view; the AI draft stays."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO assessments (search_id, company_id, dimension, criterion, rating, rationale, assessed_by)
+            VALUES (%s, %s, %s, %s, %s, %s, 'analyst');
+            """,
+            (search_id, company_id, dimension, criterion, rating, rationale),
+        )
+
+
+def get_ai_assessment(search_id, company_id):
+    """The latest AI assessment of a candidate: {(dimension, criterion):
+    row with fact_ids and event_ids it cites}."""
+    with cursor(readonly=True) as cur:
+        cur.execute(
+            """
+            SELECT a.*,
+                   coalesce((SELECT array_agg(fact_id) FROM assessment_evidence
+                             WHERE assessment_id = a.id AND fact_id IS NOT NULL), '{}') AS fact_ids,
+                   coalesce((SELECT array_agg(event_id) FROM assessment_evidence
+                             WHERE assessment_id = a.id AND event_id IS NOT NULL), '{}') AS event_ids
+            FROM (SELECT DISTINCT ON (dimension, criterion) *
+                  FROM assessments
+                  WHERE search_id = %s AND company_id = %s AND assessed_by = 'ai'
+                  ORDER BY dimension, criterion, created_at DESC) a;
+            """,
+            (search_id, company_id),
+        )
+        return {(r["dimension"], r["criterion"]): r for r in cur.fetchall()}
+
 
 def get_assessments(search_id, company_ids):
     """Return {company_id: {(dimension, criterion): latest assessment}}."""

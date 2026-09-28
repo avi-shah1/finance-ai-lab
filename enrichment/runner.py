@@ -36,18 +36,25 @@ AI_LABELS = {p.name: p.label for p in AI_PROVIDERS}
 PROVIDER_LABELS = {**STRUCTURED_LABELS, **AI_LABELS}
 
 
-def enrich_company(company_id, only=None, group="structured"):
-    """Research one company with one group of providers. Returns a list of
-    per-provider summaries: [{"provider", "label", "status", "message", "facts"}]."""
+def enrich_company(company_id, only=None, group="structured", providers=None, search_id=None):
+    """Research one company with one group of providers (or an explicit
+    list of provider objects, e.g. the lighter screening set). Returns a
+    list of per-provider summaries: [{"provider", "label", "status", "message", "facts"}]."""
     company = database.get_company(company_id)
     if company is None:
         raise ValueError(f"No company with id {company_id}")
-    ctx = Context(company=dict(company), identifiers=database.get_identifiers(company_id), http=Http())
+    ctx = Context(company=dict(company), identifiers=database.get_identifiers(company_id), http=Http(),
+                  search_id=search_id)
     if group == "ai":
         ctx.sources = database.get_sources(company_id)
 
+    # Providers keep per-run state (HTTP session, credentials), so each run
+    # gets its own objects: runs for different companies can go in parallel.
+    if providers is None:
+        providers = [type(p)() for p in GROUPS[group]]
+
     summaries = []
-    for provider in GROUPS[group]:
+    for provider in providers:
         if only and provider.name not in only:
             continue
         run_id = store.start_run(company_id, provider.name)

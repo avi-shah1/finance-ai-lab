@@ -138,6 +138,30 @@ def save_sources_bulk(provider, items):
     return len(rows)
 
 
+def save_events(company_id, provider, items):
+    """Replace this provider's events for a company with `items`, a list of
+    (SourceDoc, [event dict]) where an event dict has event_type, title,
+    summary, event_date, excerpt and evidence_type. Events entered by the
+    analyst or written by other providers are left alone. Returns the count."""
+    count = 0
+    with database.cursor() as cur:
+        cur.execute("DELETE FROM events WHERE company_id = %s AND extracted_by = %s;", (company_id, provider))
+        for src, events in items:
+            source_id = _upsert_source(cur, company_id, provider, src)
+            for ev in events:
+                cur.execute(
+                    """
+                    INSERT INTO events (company_id, event_type, title, summary, event_date, source_id,
+                                        evidence_type, excerpt, extracted_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+                    """,
+                    (company_id, ev["event_type"], ev["title"], ev.get("summary"), ev.get("event_date"),
+                     source_id, ev["evidence_type"], ev.get("excerpt"), provider),
+                )
+                count += 1
+    return count
+
+
 def _upsert_source(cur, company_id, provider, src):
     cur.execute(
         """

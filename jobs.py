@@ -13,6 +13,7 @@ import threading
 import database
 from discovery.runner import run_discovery
 from enrichment.base import EnrichmentError
+from screener.runner import run_screening
 
 log = logging.getLogger(__name__)
 
@@ -47,11 +48,13 @@ def run_now(search_id):
 def _run(search_id):
     try:
         database.set_search_status(search_id, "discovering", "Starting")
-        summary = run_discovery(search_id)
-        # Screening (Level 2) will run here once it exists.
-        database.set_search_status(search_id, "complete",
-                                   f"{summary['relevant']} relevant companies found")
-        return summary
+        found = run_discovery(search_id)
+        database.set_search_status(search_id, "screening", "Starting")
+        screened = run_screening(search_id)
+        database.set_search_status(
+            search_id, "complete",
+            f"{found['relevant']} relevant companies found, {screened['screened']} screened and assessed")
+        return {**found, **screened}
     except EnrichmentError as exc:
         database.set_search_status(search_id, "failed", error=str(exc))
     except Exception as exc:  # a bug: keep the details in the log, show a short message
@@ -60,6 +63,31 @@ def _run(search_id):
     finally:
         with _lock:
             _running.discard(search_id)
+
+
+def start_screening(search_id, company_ids):
+    """Screen specific candidates in the background (e.g. ones beyond the
+    automatic top 20, or to re-assess). Returns False if the search is busy."""
+    with _lock:
+        if search_id in _running:
+            return False
+        _running.add(search_id)
+
+    def work():
+        try:
+            summary = run_screening(search_id, company_ids=company_ids)
+            database.set_search_status(search_id, "complete",
+                                       f"{summary['screened']} more candidate(s) screened")
+        except Exception as exc:
+            log.exception("Screening job for search %s failed", search_id)
+            database.set_search_status(search_id, "failed", error=f"{type(exc).__name__}: {exc}")
+        finally:
+            with _lock:
+                _running.discard(search_id)
+
+    database.set_search_status(search_id, "screening", "Waiting to start")
+    threading.Thread(target=work, name=f"screen-{search_id}", daemon=True).start()
+    return True
 
 
 def fail_interrupted():

@@ -28,11 +28,19 @@ TASK_MODELS = {
     "plan_queries": HAIKU,       # turn buyer/sector/geography into search queries
     "triage": HAIKU,             # is each discovered company in scope?
     "buyer_profile": HAIKU,      # facts about the buyer from its own pages
-    "screening_extract": HAIKU,  # facts about a candidate from pages and news
+    "screening_extract": HAIKU,  # facts about a candidate from its website pages
+    "screening_news": HAIKU,     # dated events from news articles about a candidate
     "assessment": SONNET,        # buyer-fit ratings with cited evidence
     # Deep research (only when requested)
     "deep_documents": HAIKU,     # figures from filed PDF accounts
     "deep_website": HAIKU,       # facts from the company's website pages
+}
+
+# Sonnet thinks before answering by default, and thinking is billed as
+# output. Measured on a real assessment: thinking cut from 8,575 to 2,996
+# output tokens (-53% cost) with an equally good answer, so it is off.
+TASK_THINKING = {
+    "assessment": {"type": "disabled"},
 }
 
 # If a model's safety filter declines a request, the API can re-run it on a
@@ -52,7 +60,7 @@ def require_key():
         raise CredentialsMissing("API credentials required: add ANTHROPIC_API_KEY to .env.")
 
 
-def extract(system, content, schema, task, max_tokens=16000, search_id=None, company_id=None):
+def extract(system, content, schema, task, max_tokens=16000, search_id=None, company_id=None, thinking=None):
     """Send `content` (a list of content blocks) using the model for `task`
     and return (validated schema instance, metadata dict). The call's cost is
     recorded against `search_id` / `company_id` when given. Raises typed
@@ -67,6 +75,9 @@ def extract(system, content, schema, task, max_tokens=16000, search_id=None, com
     options = {}
     if model.startswith(FALLBACK_MODELS):
         options = {"betas": [FALLBACK_BETA], "fallbacks": "default"}
+    thinking = thinking if thinking is not None else TASK_THINKING.get(task)
+    if thinking is not None:
+        options["thinking"] = thinking
 
     client = anthropic.Anthropic(max_retries=3)
     try:

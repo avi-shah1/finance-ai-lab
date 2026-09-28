@@ -64,7 +64,10 @@ def normalise_name(name):
     name = re.sub(r"[^a-z0-9 ]+", " ", (name or "").lower())
     words = name.split()
     suffixes = {"limited", "ltd", "plc", "llp", "inc", "incorporated", "corp", "corporation",
-                "co", "company", "the", "llc", "sa", "ag", "nv", "se", "gmbh"}
+                "co", "company", "the", "llc", "sa", "ag", "nv", "se", "gmbh",
+                # other European legal forms, e.g. "Crossuite bv", "CompuGroup Medical SE & Co. KGaA"
+                "bv", "bvba", "sas", "sarl", "srl", "spa", "ab", "as", "asa", "oy", "oyj", "aps",
+                "kg", "kgaa", "ug", "sl", "slu", "sro", "pty", "pte"}
     while words and words[-1] in suffixes:
         words.pop()
     while words and words[0] == "the":

@@ -76,6 +76,7 @@ class Context:
     identifiers: dict                  # {scheme: value}
     http: object                       # enrichment.http.Http
     sources: list = field(default_factory=list)   # existing source rows (for AI extractors)
+    search_id: int | None = None       # the search this research is for (cost tracking)
 
 
 class Provider:

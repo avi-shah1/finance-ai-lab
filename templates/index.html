@@ -16,11 +16,14 @@
             <input type="text" name="geography" placeholder="e.g. Europe" required>
         </label>
         <button class="btn btn-primary btn-lg" type="submit">Find Targets</button>
-        <label class="span-all">Additional criteria <span class="optional">(optional)</span>
+        <label>Buyer website <span class="optional">(optional)</span>
+            <input type="text" name="buyer_website" placeholder="e.g. salesforce.com">
+        </label>
+        <label class="span-rest">Additional criteria <span class="optional">(optional)</span>
             <textarea name="criteria" rows="2" placeholder="e.g. privately owned, under 200 employees, sells to hospitals rather than pharma"></textarea>
         </label>
     </form>
-    <p class="hint">Targets are found automatically from the web. Sector, geography and criteria decide which companies are considered; they don't count towards any screening view. The buyer's name is never sent to the search provider.</p>
+    <p class="hint">Targets are found automatically from the web, then the most promising 20 are researched and assessed against the buyer (usually 3–6 minutes, about $1). The buyer's website is used to profile what it sells; listed buyers are found in public registers without it. The buyer's name is never sent to the search provider.</p>
 </section>
 
 <section class="panel" id="searches">

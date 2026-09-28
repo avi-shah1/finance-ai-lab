@@ -149,7 +149,13 @@ def create_search():
     if not (buyer and sector and geography):
         return form_error_redirect("Buyer, target sector and geography are all required.",
                                    url_for("home"))
+    buyer_website = _text("buyer_website")
+    if buyer_website and external_url(buyer_website) is None:
+        return form_error_redirect("Buyer website should look like example.com or https://example.com.",
+                                   url_for("home"))
     buyer_id = database.find_or_create_company(buyer)
+    if buyer_website:
+        database.set_website_if_missing(buyer_id, buyer_website)
     search_id = database.insert_search(buyer_id, sector, geography, _text("criteria"))
     jobs.start_search(search_id)
     return redirect(url_for("show_search", search_id=search_id))
@@ -166,8 +172,14 @@ def show_search(search_id):
     ids = [c["id"] for c in candidates]
     profiles = build_profiles(candidates, database.get_facts_for(ids), database.get_events_for(ids),
                               database.get_latest_runs(ids))
-    shown = [p for p in profiles if p.company["stage"] not in ("filtered_out", "dismissed")]
+    assessments = database.get_assessments(search_id, ids)
+    # Shortlisted first, then screened by overall view, then the rest in discovery order.
+    shown = sorted((p for p in profiles if p.company["stage"] not in ("filtered_out", "dismissed")),
+                   key=lambda p: (p.company["stage"] != "shortlisted",
+                                  _overall_order(assessments.get(p.company["id"], {})),
+                                  p.company["rank"] or 10**6))
     filtered = [p for p in profiles if p.company["stage"] == "filtered_out"]
+    dismissed = [p for p in profiles if p.company["stage"] == "dismissed"]
 
     buyer_id = search["buyer_company_id"]
     buyer = _load_profile(buyer_id)
@@ -184,11 +196,78 @@ def show_search(search_id):
         buyer=buyer,
         profiles=shown,
         filtered=filtered,
-        assessments=database.get_assessments(search_id, ids),
+        dismissed=dismissed,
+        unscreened=sum(1 for p in shown if p.company["stage"] == "discovered"),
+        assessments=assessments,
         addable=addable,
         usage=usage,
         total_cost=sum((u["cost_usd"] or 0) for u in usage),
     )
+
+
+OVERALL_ORDER = list(screening.OVERALL_VIEWS)
+
+
+def _overall_order(company_assessments):
+    overall = company_assessments.get(("overall", None))
+    return OVERALL_ORDER.index(overall["rating"]) if overall else len(OVERALL_ORDER)
+
+
+@app.route("/searches/<int:search_id>/screen", methods=["POST"])
+def screen_candidates(search_id):
+    """Screen (or re-screen) chosen candidates, or the next unscreened ones."""
+    search = database.get_search(search_id) or abort(404)
+    candidates = database.get_candidates(search_id)
+    company_ids = request.form.getlist("company_id", type=int)
+    if not company_ids:
+        count = request.form.get("count", type=int) or 10
+        company_ids = [c["id"] for c in candidates if c["stage"] == "discovered"][:count]
+    known = {c["id"] for c in candidates}
+    company_ids = [cid for cid in company_ids if cid in known]
+    back = _next_url(url_for("show_search", search_id=search_id))
+    if not company_ids:
+        flash("Nothing to screen.", "info")
+    elif not jobs.start_screening(search_id, company_ids):
+        flash("This search is already running. Try again when it has finished.", "info")
+    else:
+        flash(f"Screening {len(company_ids)} candidate(s) in the background.", "info")
+    return redirect(back)
+
+
+CANDIDATE_ACTIONS = {"shortlisted", "dismissed", "undo"}
+
+
+@app.route("/searches/<int:search_id>/candidates/<int:company_id>/stage", methods=["POST"])
+def set_candidate_stage(search_id, company_id):
+    stage = request.form.get("stage")
+    if stage not in CANDIDATE_ACTIONS:
+        abort(400)
+    database.set_candidate_stage(search_id, company_id, stage)
+    return redirect(_next_url(url_for("show_search", search_id=search_id)))
+
+
+@app.route("/searches/<int:search_id>/companies/<int:company_id>/assessments", methods=["POST"])
+def override_assessment(search_id, company_id):
+    """The analyst's own rating for a dimension (or the overall view). It
+    becomes the current view; the AI draft is kept and still shown."""
+    back = _next_url(url_for("show_company", company_id=company_id, search=search_id))
+    dimension = request.form.get("dimension")
+    criterion = request.form.get("criterion") or None
+    rating = request.form.get("rating")
+    rationale = _text("rationale")
+    dimensions = {d["code"]: d for d in screening.DIMENSIONS}
+    if dimension == "overall":
+        valid = criterion is None and rating in screening.OVERALL_VIEWS
+    else:
+        valid = (dimension in dimensions and rating in screening.DIMENSION_RATINGS
+                 and (criterion is None or criterion in dimensions[dimension]["criteria"]))
+    if not valid:
+        abort(400)
+    if not rationale:
+        return form_error_redirect("Please give a short reason for your rating.", back)
+    database.insert_analyst_assessment(search_id, company_id, dimension, criterion, rating, rationale)
+    flash("Your rating is now the current view. The AI draft is kept for reference.", "info")
+    return redirect(back)
 
 
 @app.route("/searches/<int:search_id>/run", methods=["POST"])
@@ -277,19 +356,30 @@ def show_company(company_id):
     profile = _load_profile(company_id)
 
     # Assessments only make sense against a particular buyer, i.e. a search.
-    search = None
-    assessments = {}
+    search = candidate = None
+    assessments, ai_assessment = {}, {}
     search_id = request.args.get("search", type=int)
     if search_id:
         search = database.get_search(search_id)
         if search:
             assessments = database.get_assessments(search_id, [company_id]).get(company_id, {})
+            ai_assessment = database.get_ai_assessment(search_id, company_id)
+            candidate = next((c for c in database.get_candidates(search_id) if c["id"] == company_id), None)
 
+    # Cited evidence can be the buyer's too (e.g. its products), so look up
+    # every cited fact/event, not just this company's.
+    cited_facts = {f for row in ai_assessment.values() for f in row["fact_ids"]}
+    cited_events = {e for row in ai_assessment.values() for e in row["event_ids"]}
     return render_template(
         "company.html",
         profile=profile,
         search=search,
+        candidate=candidate,
+        running=bool(search) and search["status"] in RUNNING_STATUSES,
         assessments=assessments,
+        ai_assessment=ai_assessment,
+        facts_by_id=database.get_facts_by_id(cited_facts),
+        events_by_id=database.get_events_by_id(cited_events),
         fact_types=database.get_fact_types(),
     )
 

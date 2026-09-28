@@ -536,7 +536,7 @@
                             {% if c.relevance %}<span class="relevance relevance-{{ c.relevance }}">{{ c.relevance | capitalize }} relevance</span>{% endif %}
                             {{ c.match_reason or "" }}
                         </td>
-                        <td data-label="Screening view">{{ rating_chip(assessments.get(c.id, {}).get(("overall", None)), overall=true) }}</td>
+                        <td data-label="Screening view">{{ screening_summary(c, assessments.get(c.id, {}), search) }}</td>
                         <td data-label="Evidence">
                             {{ coverage_meter(p.coverage) }}
                             {% for url in (c.hit_urls or [])[:2] %}
@@ -544,15 +544,139 @@
                                 {% if href %}<div class="small"><a href="{{ href }}" target="_blank" rel="noopener noreferrer">Search result {{ loop.index }}<span aria-hidden="true"> ↗</span></a></div>{% endif %}
                             {% endfor %}
                         </td>
-                        <td class="actions">
-                            <form method="post" action="{{ url_for('remove_candidate', search_id=search.id, company_id=c.id) }}">
-                                <button class="btn-icon" type="submit" title="Remove from this search" aria-label="Remove {{ c.name }} from this search">✕</button>
-                            </form>
-                        </td>
+                        <td class="actions">{{ candidate_actions(c, search) }}</td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+{% endmacro %}
+
+{# Overall view plus the four dimensions, or the candidate's screening state. #}
+{% macro screening_summary(c, a, search) %}
+    {% set overall = a.get(("overall", None)) %}
+    {% if a %}
+        <div class="screen-summary">
+            {% if overall %}{{ rating_chip(overall, overall=true) }}{% if overall.assessed_by == "analyst" %} <span class="muted small" title="Your override">✎</span>{% endif %}
+            {% else %}<span class="rating rating-insufficient_evidence">Insufficient evidence</span>{% endif %}
+            <ul class="dim-mini">
+                {% for d in vocab.DIMENSIONS %}
+                    {% set r = a.get((d.code, None)) %}
+                    <li title="{{ d.label }}: {{ vocab.DIMENSION_RATINGS[r.rating] if r else 'Not assessed' }}">
+                        <span class="dim-dot rating-{{ r.rating if r else 'none' }}"></span>{{ d.label.split(" ")[0] }}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% elif c.screening_error %}
+        <span class="rating rating-avoid" title="{{ c.screening_error }}">Screening failed</span>
+        {{ screen_button(c, search, "Retry") }}
+    {% elif c.stage == "discovered" %}
+        <span class="rating rating-none">Not screened</span>
+        {{ screen_button(c, search, "Screen") }}
+    {% else %}
+        {{ rating_chip(None) }}
+    {% endif %}
+{% endmacro %}
+
+{% macro screen_button(c, search, label) %}
+    <form class="inline-form" method="post" action="{{ url_for('screen_candidates', search_id=search.id) }}">
+        <input type="hidden" name="company_id" value="{{ c.id }}">
+        <button class="btn btn-sm" type="submit" title="Gather evidence and assess this company (about 5 cents)">{{ label }}</button>
+    </form>
+{% endmacro %}
+
+{# "AI draft by <model>", plus the analyst's override when there is one. #}
+{% macro ai_draft(ai_row, current, overall=false) %}
+    <div class="ai-draft">
+        <span class="ev ev-ai">AI draft</span>
+        {{ rating_chip(ai_row, overall=overall) }}
+        <span class="muted small">by {{ ai_row.model }} · {{ ai_row.created_at | fmt_date }}</span>
+        {% if current and current.assessed_by == "analyst" %}
+            <span class="override-note">Overridden by you: {{ rating_chip(current, overall=overall) }} “{{ current.rationale }}”</span>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{# The evidence an AI assessment cites, each with its source. Evidence about
+   the buyer (e.g. its products) is labelled as such. #}
+{% macro cited_evidence(row, facts_by_id, events_by_id, company) %}
+    {% if row.fact_ids or row.event_ids %}
+        <h3 class="subhead">Cited evidence</h3>
+        <ul class="evidence-list cited-list">
+            {% for fid in row.fact_ids %}
+                {% set f = facts_by_id.get(fid) %}
+                {% if f %}
+                    <li>
+                        <div class="evidence-main">
+                            {% if f.company_id != company.id %}<span class="tag">Buyer: {{ f.company_name }}</span>{% endif %}
+                            <span class="muted">{{ f.label }}:</span> <span class="val">{{ f.value_text }}</span>
+                            {% if f.period %}<span class="period">{{ f.period }}</span>{% endif %}
+                        </div>
+                        {% if f.excerpt %}<blockquote class="excerpt">“{{ f.excerpt }}”</blockquote>{% endif %}
+                        {{ source_ref(f) }}
+                    </li>
+                {% endif %}
+            {% endfor %}
+            {% for eid in row.event_ids %}
+                {% set e = events_by_id.get(eid) %}
+                {% if e %}
+                    <li>
+                        <div class="evidence-main">
+                            <span class="tag">{{ vocab.EVENT_TYPES[e.event_type] }}</span>
+                            <span class="muted">{{ e.event_date | fmt_date if e.event_date else "Date unknown" }}</span>
+                            <span class="val">{{ e.title }}</span>
+                        </div>
+                        {% if e.excerpt %}<blockquote class="excerpt">“{{ e.excerpt }}”</blockquote>{% endif %}
+                        {{ source_ref(e) }}
+                    </li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="muted small">No evidence cited.</p>
+    {% endif %}
+{% endmacro %}
+
+{# The analyst's own rating for a dimension or the overall view. #}
+{% macro override_form(search, company, dimension, criterion, options, next_url) %}
+    <details class="override">
+        <summary>Override this rating</summary>
+        <form class="form override-form" method="post" action="{{ url_for('override_assessment', search_id=search.id, company_id=company.id) }}">
+            <input type="hidden" name="dimension" value="{{ dimension }}">
+            {% if criterion %}<input type="hidden" name="criterion" value="{{ criterion }}">{% endif %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <label>Your rating
+                <select name="rating" required>
+                    {% for code, label in options.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                </select>
+            </label>
+            <label>Why
+                <textarea name="rationale" rows="2" required placeholder="e.g. Management told us they are not selling"></textarea>
+            </label>
+            <button class="btn" type="submit">Save my rating</button>
+        </form>
+    </details>
+{% endmacro %}
+
+{# Shortlist / dismiss a candidate (or undo). Dismissed candidates are kept, just hidden. #}
+{% macro candidate_actions(c, search) %}
+    <div class="action-row">
+        {% if c.stage == "shortlisted" %}
+            <form method="post" action="{{ url_for('set_candidate_stage', search_id=search.id, company_id=c.id) }}">
+                <input type="hidden" name="stage" value="undo">
+                <button class="btn-icon is-on" type="submit" title="Shortlisted: click to undo" aria-label="Remove {{ c.name }} from the shortlist">★</button>
+            </form>
+        {% else %}
+            <form method="post" action="{{ url_for('set_candidate_stage', search_id=search.id, company_id=c.id) }}">
+                <input type="hidden" name="stage" value="shortlisted">
+                <button class="btn-icon" type="submit" title="Shortlist" aria-label="Shortlist {{ c.name }}">☆</button>
+            </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('set_candidate_stage', search_id=search.id, company_id=c.id) }}">
+            <input type="hidden" name="stage" value="dismissed">
+            <button class="btn-icon" type="submit" title="Dismiss (kept in a list below; can be undone)" aria-label="Dismiss {{ c.name }}">✕</button>
+        </form>
     </div>
 {% endmacro %}
 

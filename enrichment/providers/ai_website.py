@@ -38,10 +38,18 @@ class AIWebsite(Provider):
     name = "ai_website"
     label = "AI: company website"
 
+    def __init__(self, max_pages=MAX_PAGES, max_chars=MAX_CHARS_PER_PAGE, task="deep_website"):
+        # Screening sends fewer, shorter pages than deep research, and is
+        # billed under its own task name.
+        self.max_pages, self.max_chars, self.task = max_pages, max_chars, task
+
     def _pages(self, ctx):
-        return [s for s in ctx.sources
-                if s.get("provider") == "website" and s.get("source_type") == "company_website"
-                and s.get("content_path")][:MAX_PAGES]
+        # Homepage first, then the other pages in the order they were found.
+        pages = [s for s in ctx.sources
+                 if s.get("provider") == "website" and s.get("source_type") == "company_website"
+                 and s.get("content_path")]
+        pages.sort(key=lambda s: (s.get("url") or "").rstrip("/").count("/"))
+        return pages[:self.max_pages]
 
     def not_applicable_reason(self, ctx):
         if not self._pages(ctx):
@@ -62,7 +70,7 @@ class AIWebsite(Provider):
                 continue
             text = raw.decode("utf-8", errors="replace")
             texts[p["url"]] = text
-            clipped = text[:MAX_CHARS_PER_PAGE]
+            clipped = text[:self.max_chars]
             blocks.append(f'<page url="{p["url"]}">\n{clipped}\n</page>')
         if not blocks:
             raise EnrichmentError("Cached page text is missing. Re-run research to retrieve the pages.")
@@ -70,8 +78,8 @@ class AIWebsite(Provider):
         content = [{"type": "text", "text": (
             f"Company: {ctx.company['name']}\n\nWebsite pages:\n\n" + "\n\n".join(blocks)
             + "\n\nExtract the facts described by the schema.")}]
-        parsed, meta = llm.extract(SYSTEM, content, WebsiteExtraction, task="deep_website",
-                                   company_id=ctx.company.get("id"))
+        parsed, meta = llm.extract(SYSTEM, content, WebsiteExtraction, task=self.task,
+                                   company_id=ctx.company.get("id"), search_id=ctx.search_id)
 
         by_url = {p["url"]: p for p in pages}
         facts_by_source = {p["id"]: [] for p in pages if p["url"] in texts}

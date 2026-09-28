@@ -29,8 +29,8 @@
 {% if running %}
     <div class="notice notice-running" role="status">
         <span class="spinner" aria-hidden="true"></span>
-        <div><strong>Finding targets…</strong> {{ search.status_message or "" }}
-            <div class="muted small">This usually takes under a minute. The page updates by itself.</div></div>
+        <div><strong>{{ "Researching and assessing candidates…" if search.status == "screening" else "Finding targets…" }}</strong> {{ search.status_message or "" }}
+            <div class="muted small">A full search usually takes 3–6 minutes. The page updates by itself, and you can leave it and come back.</div></div>
     </div>
 {% elif search.status == "failed" %}
     <div class="notice notice-failed" role="alert">
@@ -51,8 +51,16 @@
             {% else %}{{ profiles | length }} candidates · {{ filtered | length }} filtered out{% endif %}
         </span>
     </li>
-    <li class="stage"><span class="stage-name">Screening</span><span class="stage-state">Not built yet</span></li>
-    <li class="stage"><span class="stage-name">AI assessment</span><span class="stage-state">Not built yet</span></li>
+    {% set screened_count = profiles | selectattr("company.screened_at") | list | length %}
+    <li class="stage {{ 'stage-done' if search.status == 'complete' and screened_count }}">
+        <span class="stage-name">Screening &amp; assessment</span>
+        <span class="stage-state">
+            {% if search.status == "screening" %}{{ search.status_message or "Running" }}
+            {% elif search.status in ("queued", "discovering") %}Waits for discovery
+            {% else %}{{ screened_count }} assessed{% if unscreened %} · {{ unscreened }} not yet{% endif %}{% endif %}
+        </span>
+    </li>
+    <li class="stage"><span class="stage-name">Your review</span><span class="stage-state">Shortlist ☆, dismiss ✕, or override a rating</span></li>
     <li class="stage"><span class="stage-name">Deep research</span><span class="stage-state">On request, per company</span></li>
 </ol>
 
@@ -60,8 +68,17 @@
     <section class="panel">
         <div class="panel-head">
             <h2>Candidates</h2>
-            <span class="muted">{{ profiles | length }} shown</span>
+            <div class="head-actions">
+                <span class="muted">{{ profiles | length }} shown</span>
+                {% if unscreened and not running %}
+                    <form method="post" action="{{ url_for('screen_candidates', search_id=search.id) }}">
+                        <input type="hidden" name="count" value="10">
+                        <button class="btn" type="submit" title="About 5 cents per company">Screen next {{ [unscreened, 10] | min }}</button>
+                    </form>
+                {% endif %}
+            </div>
         </div>
+        <p class="hint panel-hint">Ratings are Claude's drafts from the cited evidence; open a company to see the reasoning and sources, or to override a rating.</p>
         {% if profiles %}
             {{ ui.discovery_table(profiles, search, assessments) }}
         {% elif running %}
@@ -81,6 +98,24 @@
                             {% set site = c.website | external_url %}
                             {% if site %}<a class="small" href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ c.domain }} ↗</a>{% endif %}
                             <div class="muted small">{{ c.match_reason }}</div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </details>
+        {% endif %}
+
+        {% if dismissed %}
+            <details class="panel-inset filtered">
+                <summary>{{ dismissed | length }} dismissed</summary>
+                <ul class="filtered-list">
+                    {% for p in dismissed %}
+                        {% set c = p.company %}
+                        <li class="dismissed-item">
+                            <a class="company-link" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}">{{ c.name }}</a>
+                            <form class="inline-form" method="post" action="{{ url_for('set_candidate_stage', search_id=search.id, company_id=c.id) }}">
+                                <input type="hidden" name="stage" value="undo">
+                                <button class="btn btn-sm" type="submit">Restore</button>
+                            </form>
                         </li>
                     {% endfor %}
                 </ul>

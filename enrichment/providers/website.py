@@ -59,6 +59,9 @@ class Website(Provider):
     name = "website"
     label = "Company website"
 
+    def __init__(self, max_pages=MAX_PAGES):
+        self.max_pages = max_pages   # screening reads fewer pages than deep research
+
     def not_applicable_reason(self, ctx):
         if ctx.company.get("website"):
             return None
@@ -82,7 +85,7 @@ class Website(Provider):
 
         pages = [(home.url, home.soup, home_src)]
         to_visit = self._section_pages(home.url, home.soup, base_host)
-        for url in to_visit[: MAX_PAGES - 1]:
+        for url in to_visit[: self.max_pages - 1]:
             if not self._allowed(url):
                 continue
             time.sleep(PAUSE_SECONDS)

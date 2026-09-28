@@ -489,6 +489,8 @@ a.src-name { color: var(--accent); }
 /* ---- Discovery ---------------------------------------------------------- */
 
 .search-form .span-all { grid-column: 1 / -1; }
+.search-form .span-rest { grid-column: 2 / -1; }
+@media (max-width: 860px) { .search-form .span-rest { grid-column: 1 / -1; } }
 .optional { text-transform: none; letter-spacing: normal; color: var(--faint); font-weight: 400; }
 .panel-hint { margin: -0.4rem 0 0.9rem; }
 
@@ -523,6 +525,41 @@ a.src-name { color: var(--accent); }
 .relevance-high { color: var(--green); }
 .relevance-medium { color: var(--amber); }
 .relevance-low { color: var(--grey); }
+
+.screen-summary { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+.dim-mini { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, auto); gap: 0.1rem 0.7rem; }
+.dim-mini li { font-size: 0.72rem; color: var(--muted); white-space: nowrap; display: flex; align-items: center; gap: 0.3rem; }
+.dim-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.dim-dot.rating-none { color: var(--faint); background: transparent; border: 1px dashed var(--faint); }
+.dim-dot.rating-insufficient_evidence { background: transparent; border: 1px dashed currentColor; }
+.btn-sm { padding: 0.2rem 0.6rem; font-size: 0.78rem; height: auto; margin-top: 0.35rem; }
+.inline-form { display: inline; }
+.action-row { display: flex; gap: 0.3rem; }
+.head-actions { display: flex; align-items: center; gap: 0.8rem; }
+
+/* Assessment detail (company page) */
+.candidate-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; margin-bottom: 0.9rem; }
+.candidate-bar .btn-sm { margin-top: 0; }
+.ai-draft { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.8rem; }
+.override-note { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; color: var(--text); font-size: 0.85rem; }
+.facts-vs-view p { margin: 0; color: var(--text); }
+.cited-list { margin-bottom: 1rem; }
+.cite {
+    display: inline-block;
+    margin: 0.1rem 0.25rem 0 0;
+    padding: 0 0.4rem;
+    font-size: 0.72rem;
+    color: var(--muted);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    cursor: help;
+}
+.override, .evidence-on-file { margin-top: 0.9rem; }
+.override summary, .evidence-on-file summary { cursor: pointer; color: var(--muted); font-size: 0.88rem; }
+.override-form { margin-top: 0.7rem; max-width: 520px; }
+.dismissed-item { display: flex; align-items: center; gap: 0.6rem; }
+.dismissed-item .btn-sm { margin-top: 0; }
+.btn-icon.is-on { color: var(--amber); border-color: rgba(251, 191, 36, 0.4); }
 
 .size-cell { white-space: nowrap; }
 .size-cell > div + div { margin-top: 0.2rem; }

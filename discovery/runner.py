@@ -25,7 +25,7 @@ from .sources.exa import ExaSource
 log = logging.getLogger(__name__)
 
 RESULTS_PER_QUERY = 12
-MAX_TRIAGE = 60          # most candidates sent to triage per search (cost cap)
+MAX_TRIAGE = 30          # most candidates sent to triage per search (cost cap)
 RELEVANCE_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
@@ -107,6 +107,8 @@ def run_discovery(search_id, source=None):
     database.upsert_search_candidates(search_id, rows)
     try:
         store.save_sources_bulk("discovery", sources)
+        # The country decides which registers screening can use (e.g. Companies House for the UK).
+        database.fill_hq_countries({cid: _country(src) for cid, src in sources if _country(src)})
     except Exception:
         # Missing facts shouldn't lose the whole search: the candidates are saved.
         log.exception("Could not save discovery facts for search %s", search_id)
@@ -143,6 +145,12 @@ def _save_hits(search_id, hits, company_ids):
                      "snippet": (h.text or "")[:1000] or None, "domain": domain,
                      "company_id": company_ids.get(domain)})
     database.insert_discovery_hits(search_id, rows)
+
+
+def _country(source):
+    """'Cambridge, England, United Kingdom' -> 'United Kingdom'."""
+    hq = next((f.value_text for f in source.facts if f.fact_type == "headquarters"), None)
+    return hq.rsplit(",", 1)[-1].strip() if hq else None
 
 
 def _profile_source(cand, verdict):

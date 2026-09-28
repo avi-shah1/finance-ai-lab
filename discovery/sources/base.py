@@ -23,6 +23,7 @@ class SearchSource:
         """False when the API key is missing."""
         raise NotImplementedError
 
-    def search(self, query, *, category="company", num_results=10, search_id=None, task="discovery_search"):
+    def search(self, query, *, category="company", num_results=10, search_id=None, task="discovery_search",
+               text_chars=1000, company_id=None):
         """Return a list of SearchHit. Records its own cost in api_usage."""
         raise NotImplementedError

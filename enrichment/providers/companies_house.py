@@ -60,6 +60,9 @@ class CompaniesHouse(Provider):
     name = "companies_house"
     label = "Companies House"
 
+    def __init__(self, max_accounts=MAX_ACCOUNTS_DOCUMENTS):
+        self.max_accounts = max_accounts   # screening checks only the latest accounts
+
     def not_applicable_reason(self, ctx):
         if ctx.identifiers.get("companies_house") or is_uk(ctx.company.get("hq_country")):
             return None
@@ -98,7 +101,7 @@ class CompaniesHouse(Provider):
             problems.append(f"Filing history: {exc}")
 
         latest_parsed = None
-        for filing in filings[:MAX_ACCOUNTS_DOCUMENTS]:
+        for filing in filings[:self.max_accounts]:
             doc = self._accounts_document(number, filing)
             result.sources.append(doc)
             if doc.parse_status == "failed":
@@ -115,7 +118,7 @@ class CompaniesHouse(Provider):
         facts = sum(len(s.facts) for s in result.sources)
         result.message = result.message or (
             f"{profile.get('company_name')} ({number}): {facts} facts from "
-            f"{len(result.sources)} sources, {min(len(filings), MAX_ACCOUNTS_DOCUMENTS)} accounts filings checked.")
+            f"{len(result.sources)} sources, {min(len(filings), self.max_accounts)} accounts filings checked.")
         return result
 
     # -- HTTP -------------------------------------------------------------

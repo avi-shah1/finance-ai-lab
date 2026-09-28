@@ -28,7 +28,8 @@ class ExaSource(SearchSource):
     def available(self):
         return bool(os.environ.get("EXA_API_KEY"))
 
-    def search(self, query, *, category="company", num_results=10, search_id=None, task="discovery_search"):
+    def search(self, query, *, category="company", num_results=10, search_id=None, task="discovery_search",
+               text_chars=TEXT_CHARS, company_id=None):
         key = os.environ.get("EXA_API_KEY")
         if not key:
             raise CredentialsMissing("API credentials required: add EXA_API_KEY to .env.")
@@ -37,17 +38,18 @@ class ExaSource(SearchSource):
             "type": "auto",
             "category": category,
             "numResults": num_results,
-            "contents": {"text": {"maxCharacters": TEXT_CHARS}},
+            "contents": {"text": {"maxCharacters": text_chars}},
         }
         data = self.http.post_json(ENDPOINT, payload, headers={"x-api-key": key})
 
         results = data.get("results") or []
         # Exa reports what the call actually cost; fall back to our estimate.
         cost = (data.get("costDollars") or {}).get("total")
-        usage.record_service("exa", task, "search", 1, search_id=search_id,
+        usage.record_service("exa", task, "search", 1, search_id=search_id, company_id=company_id,
                              cost_usd=Decimal(str(cost)) if cost is not None else None)
         if cost is None and results:
-            usage.record_service("exa", task + "_text", "page", len(results), search_id=search_id)
+            usage.record_service("exa", task + "_text", "page", len(results), search_id=search_id,
+                                 company_id=company_id)
 
         return [
             SearchHit(source=self.name, query=query, rank=i, url=r["url"], title=r.get("title"),
