@@ -242,7 +242,7 @@ a.criterion:hover { border-color: var(--accent-border); text-decoration: none; }
 .panel > h2 { margin-bottom: 16px; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .panel-hint { margin: -4px 0 16px; }
-.head-actions { display: flex; align-items: center; gap: 12px; }
+.head-actions { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
 .panel-inset {
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -583,8 +583,8 @@ a.cite:hover { color: var(--accent); border-color: var(--accent-border); text-de
 .legend-swatch.ev-unknown { background: none; border: 1px dashed currentColor; }
 
 /* key-facts meter: compact bar + "5 of 8 key facts" (click for the checklist) */
-.coverage { min-width: 128px; }
-.coverage summary { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.coverage { min-width: 96px; }
+.coverage summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-weight: 500; }
 .coverage summary::before { display: none; }
 .coverage[open] > summary { margin-bottom: 8px; }
 .coverage-bar { display: block; flex: none; width: 56px; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
@@ -697,13 +697,15 @@ a.cite:hover { color: var(--accent); border-color: var(--accent-border); text-de
 .table-card-foot > details { background: var(--surface); }
 .table-card > .empty { margin: 0 24px 20px; }
 
-.company-cell { min-width: 170px; }
+.company-cell { min-width: 150px; }
+.row-actions { margin: 6px 0 0 -6px; }
+.row-actions .action-row { justify-content: flex-start; }
 .company-cell .small { margin-top: 2px; }
-.what-cell { min-width: 220px; }
+.what-cell { min-width: 200px; }
 .what-bullets { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; color: var(--text-2); font-size: 13px; line-height: 1.45; }
 .what-bullets li::marker { color: var(--faint); }
 
-.size-cell { min-width: 150px; max-width: 190px; }
+.size-cell { min-width: 130px; max-width: 180px; }
 .size-line { white-space: nowrap; }
 .size-line { color: var(--text); }
 .size-line + .size-line, .size-line + .size-note + .size-line { margin-top: 8px; }
@@ -711,8 +713,8 @@ a.cite:hover { color: var(--accent); border-color: var(--accent-border); text-de
 .size-src a { color: var(--muted); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 2px; }
 .size-note { margin: 2px 0 0 15px; }
 
-.match-cell { min-width: 180px; font-size: 13px; }
-.verdict-cell { min-width: 210px; }
+.match-cell { min-width: 150px; font-size: 13px; }
+.verdict-cell { min-width: 180px; }
 .screen-summary { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .dim-mini { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, auto); gap: 2px 16px; }
 .dim-mini li { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -868,6 +870,22 @@ a.cite:hover { color: var(--accent); border-color: var(--accent-border); text-de
 /* ==========================================================================
    Responsive
    ========================================================================== */
+
+/* Narrower screens: icon-only sidebar and tighter table cells, so the whole
+   candidates table (through the Evidence column) fits without scrolling. */
+@media (max-width: 1500px) {
+    :root { --sidebar-w: 68px; }
+    .sidebar { padding: 16px 10px; align-items: center; }
+    .brand { padding: 4px 0; }
+    .brand-name, .side-link span { display: none; }
+    .side-link { justify-content: center; padding: 10px; }
+    .page { padding: 24px 24px 48px; }
+    .table-card .data-table td { padding: 14px 12px; }
+    .table-card .data-table th { padding: 10px 12px; }
+    .table-card .data-table th:first-child, .table-card .data-table td:first-child { padding-left: 20px; }
+    .what-cell { min-width: 180px; }
+    .coverage-bar { width: 44px; }
+}
 
 @media (max-width: 1280px) {
     .buyer-main { grid-template-columns: 1fr; }

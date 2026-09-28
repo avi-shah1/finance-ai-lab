@@ -607,7 +607,6 @@
                     <th>Matches your search?</th>
                     <th>Fit for {{ search.buyer_name }}</th>
                     <th>Evidence</th>
-                    <th><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -619,6 +618,7 @@
                             {% set site = c.website | external_url %}
                             {% if site %}<div class="small"><a href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ c.domain or c.website }}<span aria-hidden="true"> ↗</span></a></div>{% endif %}
                             <div class="muted small">{% if c.origin == "manual" %}Added manually{% else %}Found via {{ c.discovered_via | map("capitalize") | join(", ") }}{% endif %}</div>
+                            <div class="row-actions">{{ candidate_actions(c, search) }}</div>
                         </td>
                         <td data-label="What they do" class="desc what-cell">{{ what_they_do(p) }}</td>
                         <td data-label="Location">{{ fact_or_unknown(p, "headquarters") }}</td>
@@ -664,7 +664,6 @@
                                 {% if href %}<div class="small"><a href="{{ href }}" target="_blank" rel="noopener noreferrer">Search result {{ loop.index }}<span aria-hidden="true"> ↗</span></a></div>{% endif %}
                             {% endfor %}
                         </td>
-                        <td class="actions">{{ candidate_actions(c, search) }}</td>
                     </tr>
                 {% endfor %}
             </tbody>
