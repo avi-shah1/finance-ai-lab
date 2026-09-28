@@ -112,6 +112,22 @@ def strip_refs(text):
     return re.sub(r"\s{2,}", " ", text).strip()
 
 
+def gist(text, limit=120):
+    """A short version of a longer text that ends cleanly: the first
+    sentence, and if that is still too long, cut at the last comma, semicolon
+    or dash before the limit (at a word boundary as a last resort, never
+    mid-word)."""
+    text = re.sub(r"\s+", " ", text or "").strip()
+    first = re.split(r"(?<=[.!?])\s+(?=[A-Z])", text, maxsplit=1)[0]
+    if len(first) <= limit:
+        return first
+    head = first[:limit]
+    cut = max(head.rfind(", "), head.rfind("; "), head.rfind(" – "), head.rfind(" - "))
+    if cut >= limit // 2:
+        return head[:cut].rstrip(" ,;–-") + "."
+    return head[:head.rfind(" ")].rstrip(" ,;–-") + "…"
+
+
 def squash(text, limit=300):
     text = re.sub(r"\s+", " ", text or "").strip()
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"

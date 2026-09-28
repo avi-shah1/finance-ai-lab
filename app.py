@@ -52,6 +52,11 @@ def no_refs(value):
     return formatting.strip_refs(value)
 
 
+@app.template_filter("gist")
+def gist_filter(value, limit=120):
+    return formatting.gist(value, limit)
+
+
 @app.template_filter("fmt_date")
 def fmt_date(value):
     return value.strftime("%d %b %Y") if value else ""

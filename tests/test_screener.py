@@ -20,7 +20,7 @@ def criterion_list(dimension, rating="strong", ids=()):
 def answer(**overrides):
     dims = {}
     for code in ("strategic_fit", "commercial_attractiveness", "transaction_feasibility", "momentum_timing"):
-        dims[code] = {"rating": "strong", "facts": "f", "interpretation": "i", "evidence_ids": [],
+        dims[code] = {"rating": "strong", "gist": "g", "facts": "f", "interpretation": "i", "evidence_ids": [],
                       "criteria": criterion_list(code)}
     dims.update(overrides)
     dims.setdefault("overall", {
@@ -49,7 +49,7 @@ class CitationRuleTests(unittest.TestCase):
 
     def test_invented_ids_are_removed(self):
         crit = criterion_list("strategic_fit", ids=["F1", "F999", "f2", "F1"])
-        rows, dropped = self.rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+        rows, dropped = self.rows(answer(strategic_fit={"rating": "strong", "gist": "g", "facts": "f", "interpretation": "i",
                                                         "evidence_ids": ["E9"], "criteria": crit}))
         c = rows[("strategic_fit", "product_adjacency")]
         self.assertEqual((c["rating"], c["fact_ids"]), ("strong", [1, 2]))   # F999 dropped, f2 accepted, F1 once
@@ -63,7 +63,7 @@ class CitationRuleTests(unittest.TestCase):
         crit = criterion_list("strategic_fit", ids=["F1"]) + [
             {"criterion": "hiring", "rating": "strong", "evidence_ids": ["F1"], "reason": "wrong dimension"},
             {"criterion": "made_up", "rating": "strong", "evidence_ids": ["F1"], "reason": "unknown"}]
-        rows, _ = self.rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+        rows, _ = self.rows(answer(strategic_fit={"rating": "strong", "gist": "g", "facts": "f", "interpretation": "i",
                                                   "evidence_ids": ["F1"], "criteria": crit}))
         self.assertNotIn(("strategic_fit", "hiring"), rows)
         self.assertNotIn(("strategic_fit", "made_up"), rows)
@@ -71,7 +71,7 @@ class CitationRuleTests(unittest.TestCase):
 
     def test_highlights(self):
         crit = criterion_list("strategic_fit", ids=["F1"])
-        rows, _ = self.rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+        rows, _ = self.rows(answer(strategic_fit={"rating": "strong", "gist": "g", "facts": "f", "interpretation": "i",
                                                   "evidence_ids": ["F1"], "criteria": crit}))
         overall = rows[("overall", None)]
         self.assertEqual(overall["headline"], "Good fit because F1.")
@@ -84,7 +84,7 @@ class CitationRuleTests(unittest.TestCase):
 
     def test_buyer_brief_is_citable_but_not_a_fact(self):
         crit = criterion_list("strategic_fit", ids=["BRIEF"])
-        rows, dropped = assess.to_rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+        rows, dropped = assess.to_rows(answer(strategic_fit={"rating": "strong", "gist": "g", "facts": "f", "interpretation": "i",
                                                              "evidence_ids": ["BRIEF"], "criteria": crit}),
                                        {**VALID, "BRIEF": ("brief", None)})
         rows = {(r["dimension"], r["criterion"]): r for r in rows}
@@ -92,14 +92,14 @@ class CitationRuleTests(unittest.TestCase):
         self.assertEqual((c["rating"], c["cites_brief"], c["fact_ids"], c["event_ids"]), ("strong", True, [], []))
         self.assertTrue(rows[("strategic_fit", None)]["cites_brief"])
         # without a brief, citing BRIEF counts as an invented citation
-        rows2, _ = assess.to_rows(answer(strategic_fit={"rating": "strong", "facts": "f", "interpretation": "i",
+        rows2, _ = assess.to_rows(answer(strategic_fit={"rating": "strong", "gist": "g", "facts": "f", "interpretation": "i",
                                                         "evidence_ids": ["BRIEF"], "criteria": crit}), VALID)
         self.assertEqual(next(r for r in rows2 if r["criterion"] == "strategy_alignment")["rating"],
                          "insufficient_evidence")
 
     def test_facts_and_interpretation_kept_apart(self):
         crit = criterion_list("momentum_timing", ids=["E9"])
-        rows, _ = self.rows(answer(momentum_timing={"rating": "mixed", "facts": "Raised £5m in 2025.",
+        rows, _ = self.rows(answer(momentum_timing={"rating": "mixed", "gist": "g", "facts": "Raised £5m in 2025.",
                                                     "interpretation": "Recent funding lowers urgency to sell.",
                                                     "evidence_ids": ["E9"], "criteria": crit}))
         dim = rows[("momentum_timing", None)]
@@ -109,8 +109,8 @@ class CitationRuleTests(unittest.TestCase):
     def test_claude_can_say_insufficient_with_citations(self):
         crit = criterion_list("commercial_attractiveness", rating="insufficient_evidence", ids=["F1"])
         rows, _ = self.rows(answer(commercial_attractiveness={
-            "rating": "insufficient_evidence", "facts": "f", "interpretation": "i", "evidence_ids": ["F1"],
-            "criteria": crit}))
+            "rating": "insufficient_evidence", "gist": "g", "facts": "f", "interpretation": "i",
+            "evidence_ids": ["F1"], "criteria": crit}))
         self.assertEqual(rows[("commercial_attractiveness", None)]["rating"], "insufficient_evidence")
         self.assertNotIn(("overall", None), rows)
 

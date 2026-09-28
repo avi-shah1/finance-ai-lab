@@ -26,7 +26,7 @@ from .schemas import AssessmentResult
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "assess-v3"   # v2: headline, strengths/risks/next checks, buyer brief; v3: no IDs in prose
+PROMPT_VERSION = "assess-v4"   # v2: headline, strengths/risks/next checks, buyer brief; v3: no IDs in prose; v4: dimension gists
 BRIEF_ID = "BRIEF"             # evidence ID of the analyst's buyer brief
 MAX_POINTS = 3
 MAX_PER_TYPE = 12       # values per multi-valued fact type (e.g. products)
@@ -187,6 +187,7 @@ def to_rows(result, valid):
             evidenced_dimensions += 1
         facts, events = split(dim_cited)
         rows.append({"dimension": d["code"], "criterion": None, "rating": rating,
+                     "headline": formatting.squash(formatting.strip_refs(dim.gist), 120),
                      "rationale": formatting.squash(dim.interpretation, 800),
                      "facts_summary": formatting.squash(dim.facts, 800),
                      "interpretation": formatting.squash(dim.interpretation, 800),

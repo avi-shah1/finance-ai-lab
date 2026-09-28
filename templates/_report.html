@@ -122,7 +122,7 @@
                 <a class="dim-tile" href="#{{ d.code }}">
                     <span class="dim-tile-label">{{ d.label }}</span>
                     {{ current_chip((d.code, None)) }}
-                    {% if ai_dim and ai_dim.interpretation %}<span class="dim-tile-text">{{ ai_dim.interpretation | no_refs | truncate(120) }}</span>{% endif %}
+                    {% if ai_dim and (ai_dim.headline or ai_dim.interpretation) %}<span class="dim-tile-text">{{ ai_dim.headline | no_refs if ai_dim.headline else ai_dim.interpretation | no_refs | gist }}</span>{% endif %}
                 </a>
             {% endfor %}
         </div>

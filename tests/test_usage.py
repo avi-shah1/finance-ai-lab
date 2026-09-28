@@ -52,6 +52,18 @@ class CostTests(unittest.TestCase):
             usage.record_service("exa", "discovery_search", "search", 1)
 
 
+class GistTests(unittest.TestCase):
+    def test_gist(self):
+        from enrichment.formatting import gist
+        self.assertEqual(gist("Short and sweet. Second sentence here."), "Short and sweet.")
+        long = ("Avelios's clinical workflow software is not a natural extension of Salesforce's CRM platform, "
+                "though both touch healthcare customers and AI themes")
+        self.assertEqual(gist(long), "Avelios's clinical workflow software is not a natural extension of Salesforce's CRM platform.")
+        out = gist("word " * 60)
+        self.assertTrue(out.endswith("…") and len(out) <= 121 and "wor…" not in out)
+        self.assertEqual(gist(None), "")
+
+
 class StripRefsTests(unittest.TestCase):
     def test_examples(self):
         from enrichment.formatting import strip_refs

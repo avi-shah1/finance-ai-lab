@@ -53,6 +53,9 @@ class Criterion(BaseModel):
 
 class Dimension(BaseModel):
     rating: Rating
+    gist: str = Field(description=(
+        "The deciding point in at most 12 words, for a summary box, e.g. "
+        "'Dental software is far from the buyer's CRM core'. Plain prose, no evidence IDs."))
     facts: str = Field(description="What the cited evidence shows, restated plainly with no judgement. 1-3 sentences.")
     interpretation: str = Field(description=(
         "Your judgement of what that means for this buyer, and the main uncertainty. 1-3 sentences."))
