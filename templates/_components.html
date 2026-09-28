@@ -607,7 +607,16 @@
                                 <p class="verdict-line">{{ (h.headline or h.rationale) | truncate(170) }}</p>
                             {% endif %}
                             {% if assessments.get(c.id) %}
-                                <a class="btn btn-sm btn-report" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}#report">View report →</a>
+                                <div class="row-buttons">
+                                    <a class="btn btn-sm btn-report" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}#report">View report →</a>
+                                    {% if c.deep_status == "running" %}
+                                        <span class="muted small">Deep research running…</span>
+                                    {% elif c.research_level == "deep" %}
+                                        <a class="btn btn-sm" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}#deep" title="Deep research done: see what it found">Deep researched ✓</a>
+                                    {% else %}
+                                        <a class="btn btn-sm" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}#deep" title="See the cost estimate, then run it">Deep research…</a>
+                                    {% endif %}
+                                </div>
                             {% endif %}
                         </td>
                         <td data-label="Evidence">
