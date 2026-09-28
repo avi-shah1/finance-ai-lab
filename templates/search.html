@@ -3,6 +3,9 @@
 
 {% block title %}{{ search.buyer_name }} · {{ search.target_sector }}{% endblock %}
 
+{# While the background job runs, reload every 4 seconds to show progress. #}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="4">{% endif %}{% endblock %}
+
 {% block content %}
 <nav class="crumbs"><a href="{{ url_for('home') }}">Searches</a> / Search #{{ search.id }}</nav>
 
@@ -13,52 +16,128 @@
         <div class="criteria">
             <span class="criterion"><span class="muted">Sector</span> {{ search.target_sector }}</span>
             <span class="criterion"><span class="muted">Geography</span> {{ search.geography }}</span>
+            {% if search.criteria %}<span class="criterion"><span class="muted">Criteria</span> {{ search.criteria }}</span>{% endif %}
             <span class="criterion"><span class="muted">Created</span> {{ search.created_at | fmt_date }}</span>
+            <span class="criterion" title="Estimated at list prices from the API usage log">
+                <span class="muted">Cost so far</span> ${{ "%.3f" | format(total_cost) }}
+            </span>
         </div>
     </div>
 </header>
 
+{# ---- Job status ---- #}
+{% if running %}
+    <div class="notice notice-running" role="status">
+        <span class="spinner" aria-hidden="true"></span>
+        <div><strong>Finding targets…</strong> {{ search.status_message or "" }}
+            <div class="muted small">This usually takes under a minute. The page updates by itself.</div></div>
+    </div>
+{% elif search.status == "failed" %}
+    <div class="notice notice-failed" role="alert">
+        <div><strong>Search failed.</strong> {{ search.error }}</div>
+        <form method="post" action="{{ url_for('rerun_search', search_id=search.id) }}">
+            <button class="btn" type="submit">Run again</button>
+        </form>
+    </div>
+{% endif %}
+
 <ol class="pipeline" aria-label="Research pipeline">
     <li class="stage stage-done"><span class="stage-name">Search defined</span><span class="stage-state">Complete</span></li>
-    <li class="stage {{ 'stage-done' if buyer.has_research }}"><span class="stage-name">Buyer profile</span><span class="stage-state">{{ "Researched" if buyer.has_research else "Run from buyer card" }}</span></li>
-    <li class="stage"><span class="stage-name">Target discovery</span><span class="stage-state">Not connected yet · add manually</span></li>
-    <li class="stage {{ 'stage-done' if profiles and profiles | selectattr('has_research') | list | length == profiles | length }}"><span class="stage-name">Evidence gathering</span><span class="stage-state">{{ profiles | selectattr("has_research") | list | length }}/{{ profiles | length }} candidates researched</span></li>
-    <li class="stage"><span class="stage-name">Assessment</span><span class="stage-state">Not connected yet</span></li>
+    <li class="stage {{ 'stage-done' if search.status == 'complete' }}">
+        <span class="stage-name">Target discovery</span>
+        <span class="stage-state">
+            {% if running %}{{ search.status_message or "Running" }}
+            {% elif search.status == "failed" %}Failed
+            {% else %}{{ profiles | length }} candidates · {{ filtered | length }} filtered out{% endif %}
+        </span>
+    </li>
+    <li class="stage"><span class="stage-name">Screening</span><span class="stage-state">Not built yet</span></li>
+    <li class="stage"><span class="stage-name">AI assessment</span><span class="stage-state">Not built yet</span></li>
+    <li class="stage"><span class="stage-name">Deep research</span><span class="stage-state">On request, per company</span></li>
 </ol>
 
 <div class="layout-split">
     <section class="panel">
         <div class="panel-head">
             <h2>Candidates</h2>
-            <span class="muted">{{ profiles | length }} in universe</span>
+            <span class="muted">{{ profiles | length }} shown</span>
         </div>
         {% if profiles %}
-            {{ ui.company_table(profiles, search=search, assessments=assessments) }}
+            {{ ui.discovery_table(profiles, search, assessments) }}
+        {% elif running %}
+            {{ ui.empty_state("Candidates will appear here when discovery finishes.") }}
         {% else %}
-            {{ ui.empty_state("No candidates yet. Automated discovery isn't connected, so add companies below.") }}
+            {{ ui.empty_state("No candidates found. Try a broader sector or geography, or run the search again.") }}
         {% endif %}
 
-        <div class="grid-2 add-candidates">
-            <form class="panel-inset form" method="post" action="{{ url_for('add_candidate', search_id=search.id) }}">
-                <h3>Add from company library</h3>
-                {% if addable %}
-                    <label>Company
-                        <select name="company_id" required>
-                            {% for c in addable %}
-                                <option value="{{ c.id }}">{{ c.name }}{% if c.hq_country %} · {{ c.hq_country }}{% endif %}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <button class="btn" type="submit">Add to candidates</button>
-                {% else %}
-                    <p class="muted">Every company in the library is already listed.</p>
-                {% endif %}
-            </form>
-            <details class="panel-inset">
-                <summary>Add a new company</summary>
-                {{ ui.company_form(search=search) }}
+        {% if filtered %}
+            <details class="panel-inset filtered">
+                <summary>{{ filtered | length }} compan{{ "y" if filtered | length == 1 else "ies" }} filtered out as not relevant</summary>
+                <ul class="filtered-list">
+                    {% for p in filtered %}
+                        {% set c = p.company %}
+                        <li>
+                            <a class="company-link" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}">{{ c.name }}</a>
+                            {% set site = c.website | external_url %}
+                            {% if site %}<a class="small" href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ c.domain }} ↗</a>{% endif %}
+                            <div class="muted small">{{ c.match_reason }}</div>
+                        </li>
+                    {% endfor %}
+                </ul>
             </details>
-        </div>
+        {% endif %}
+
+        {% if search.decisions %}
+            <details class="panel-inset">
+                <summary>How this search ran</summary>
+                <ul class="decision-list">
+                    {% for d in search.decisions %}
+                        <li><span class="tag">{{ d.step }}</span> {{ d.decision }}: {{ d.reason }}</li>
+                    {% endfor %}
+                </ul>
+                {% if usage %}
+                    <table class="data-table usage-table">
+                        <thead><tr><th>Service</th><th>Task</th><th class="num">Calls</th><th class="num">Est. cost</th></tr></thead>
+                        <tbody>
+                            {% for u in usage %}
+                                <tr><td>{{ u.service }}</td><td>{{ u.task }}</td><td class="num">{{ u.calls }}</td>
+                                    <td class="num">${{ "%.4f" | format(u.cost_usd or 0) }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+                {% if not running %}
+                    <form method="post" action="{{ url_for('rerun_search', search_id=search.id) }}">
+                        <button class="btn" type="submit" title="Replaces this search's discovered candidates">Run discovery again</button>
+                    </form>
+                {% endif %}
+            </details>
+        {% endif %}
+
+        <details class="panel-inset add-candidates">
+            <summary>Add a company manually</summary>
+            <div class="grid-2">
+                <form class="form" method="post" action="{{ url_for('add_candidate', search_id=search.id) }}">
+                    <h3>From the company library</h3>
+                    {% if addable %}
+                        <label>Company
+                            <select name="company_id" required>
+                                {% for c in addable %}
+                                    <option value="{{ c.id }}">{{ c.name }}{% if c.hq_country %} · {{ c.hq_country }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <button class="btn" type="submit">Add to candidates</button>
+                    {% else %}
+                        <p class="muted">Every company in the library is already listed.</p>
+                    {% endif %}
+                </form>
+                <div>
+                    <h3>A new company</h3>
+                    {{ ui.company_form(search=search) }}
+                </div>
+            </div>
+        </details>
     </section>
 
     <aside class="panel buyer-card">

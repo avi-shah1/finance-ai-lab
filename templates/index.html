@@ -16,8 +16,11 @@
             <input type="text" name="geography" placeholder="e.g. Europe" required>
         </label>
         <button class="btn btn-primary btn-lg" type="submit">Find Targets</button>
+        <label class="span-all">Additional criteria <span class="optional">(optional)</span>
+            <textarea name="criteria" rows="2" placeholder="e.g. privately owned, under 200 employees, sells to hospitals rather than pharma"></textarea>
+        </label>
     </form>
-    <p class="hint">Sector and geography define the candidate universe. They filter which companies are considered, but they don't count towards any screening view.</p>
+    <p class="hint">Targets are found automatically from the web. Sector, geography and criteria decide which companies are considered; they don't count towards any screening view. The buyer's name is never sent to the search provider.</p>
 </section>
 
 <section class="panel" id="searches">
@@ -31,7 +34,12 @@
                     <a href="{{ url_for('show_search', search_id=s.id) }}">
                         <span class="search-buyer">{{ s.buyer_name }}</span>
                         <span class="search-criteria">{{ s.target_sector }} · {{ s.geography }}</span>
-                        <span class="muted small">{{ s.candidate_count }} candidate{{ "" if s.candidate_count == 1 else "s" }} · {{ s.created_at | fmt_date }}</span>
+                        <span class="muted small">
+                            {% if s.status == "failed" %}<span class="status-failed">Failed</span>
+                            {% elif s.status != "complete" %}<span class="status-running">Running…</span>
+                            {% else %}{{ s.candidate_count }} candidate{{ "" if s.candidate_count == 1 else "s" }}{% endif %}
+                            · {{ s.created_at | fmt_date }}
+                        </span>
                     </a>
                 </li>
             {% endfor %}
@@ -46,6 +54,7 @@
         <h2>Company library</h2>
         <span class="muted">{{ profiles | length }} compan{{ "y" if profiles | length == 1 else "ies" }}</span>
     </div>
+    <p class="hint panel-hint">Companies you added or researched. Companies a search only discovered are listed in that search.</p>
     {% if profiles %}
         {{ ui.company_table(profiles) }}
     {% else %}

@@ -485,6 +485,78 @@
 {% endmacro %}
 
 
+{# The preferred value of a fact with its evidence dot, or "Not stated". #}
+{% macro fact_or_unknown(p, code) %}
+    {% set f = p.fact(code) %}
+    {% if f %}<span class="ev-dot ev-{{ vocab.EVIDENCE_GROUPS[f.evidence_type] }}" title="{{ vocab.EVIDENCE_TYPES[f.evidence_type] }}{% if f.excerpt %}: “{{ f.excerpt }}”{% endif %}"></span>{{ f.value_text }}{% else %}{{ unknown("Not stated") }}{% endif %}
+{% endmacro %}
+
+{# Discovered candidates for a search: what each company's own page says,
+   why it matched, and where it was found. #}
+{% macro discovery_table(profiles, search, assessments) %}
+    <div class="table-wrap">
+        <table class="data-table company-table">
+            <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>What they do</th>
+                    <th>Based in</th>
+                    <th>Size</th>
+                    <th>Why it matched</th>
+                    <th>Screening view</th>
+                    <th>Evidence</th>
+                    <th><span class="sr-only">Actions</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in profiles %}
+                    {% set c = p.company %}
+                    <tr>
+                        <td data-label="Company">
+                            <a class="company-link" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}">{{ c.name }}</a>
+                            {% set site = c.website | external_url %}
+                            {% if site %}<div class="small"><a href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ c.domain or c.website }}<span aria-hidden="true"> ↗</span></a></div>{% endif %}
+                            <div class="muted small">{% if c.origin == "manual" %}Added manually{% else %}Found via {{ c.discovered_via | map("capitalize") | join(", ") }}{% endif %}</div>
+                        </td>
+                        <td data-label="What they do" class="desc">
+                            {% set d = p.fact("description") %}
+                            {% if d %}<span class="ev-dot ev-{{ vocab.EVIDENCE_GROUPS[d.evidence_type] }}" title="{{ vocab.EVIDENCE_TYPES[d.evidence_type] }} · {{ d.source_title or d.source_name }}"></span>{{ d.value_text | truncate(140) }}{% else %}{{ unknown("Not researched") }}{% endif %}
+                        </td>
+                        <td data-label="Based in">{{ fact_or_unknown(p, "headquarters") }}</td>
+                        <td data-label="Size" class="size-cell">
+                            {% set emp = p.fact("employee_count") %}
+                            {% set rev = p.fact("revenue") %}
+                            {% set founded = p.fact("founded_year") %}
+                            {% if emp %}<div>{{ fact_or_unknown(p, "employee_count") }} staff{% if emp.notes %}<div class="muted small">{{ emp.notes | replace("Headcount change: ", "") }}</div>{% endif %}</div>{% endif %}
+                            {% if rev %}<div>{{ fact_or_unknown(p, "revenue") }} revenue{% if rev.evidence_type == "third_party_estimate" %} <span class="muted small">(est.)</span>{% endif %}</div>{% endif %}
+                            {% if founded %}<div class="muted small">Founded {{ founded.value_text }}</div>{% endif %}
+                            {% if not emp and not rev %}{{ unknown("Not stated") }}{% endif %}
+                        </td>
+                        <td data-label="Why it matched" class="desc">
+                            {% if c.relevance %}<span class="relevance relevance-{{ c.relevance }}">{{ c.relevance | capitalize }} relevance</span>{% endif %}
+                            {{ c.match_reason or "" }}
+                        </td>
+                        <td data-label="Screening view">{{ rating_chip(assessments.get(c.id, {}).get(("overall", None)), overall=true) }}</td>
+                        <td data-label="Evidence">
+                            {{ coverage_meter(p.coverage) }}
+                            {% for url in (c.hit_urls or [])[:2] %}
+                                {% set href = url | external_url %}
+                                {% if href %}<div class="small"><a href="{{ href }}" target="_blank" rel="noopener noreferrer">Search result {{ loop.index }}<span aria-hidden="true"> ↗</span></a></div>{% endif %}
+                            {% endfor %}
+                        </td>
+                        <td class="actions">
+                            <form method="post" action="{{ url_for('remove_candidate', search_id=search.id, company_id=c.id) }}">
+                                <button class="btn-icon" type="submit" title="Remove from this search" aria-label="Remove {{ c.name }} from this search">✕</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endmacro %}
+
+
 {# ---- Forms ---------------------------------------------------------- #}
 
 {# Shared "where did this come from?" fields, read by app.read_source_form(). #}

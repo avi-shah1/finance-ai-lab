@@ -21,10 +21,21 @@ class Http:
         `auth` is passed per request (never stored on the session) so
         requests strips it when a redirect leaves the original host, e.g.
         Companies House document downloads redirecting to Amazon S3."""
+        return self._request("GET", url, params=params, headers=headers, auth=auth,
+                             allow_redirects=allow_redirects)
+
+    def post_json(self, url, payload, *, headers=None):
+        """POST a JSON body and return the decoded JSON response."""
+        resp = self._request("POST", url, json=payload, headers=headers)
+        try:
+            return resp.json()
+        except ValueError:
+            raise SourceUnavailable(f"{_host(url)} returned a response that isn't valid JSON.")
+
+    def _request(self, method, url, **kwargs):
         for attempt in (1, 2):
             try:
-                resp = self.session.get(url, params=params, headers=headers, auth=auth,
-                                        timeout=self.timeout, allow_redirects=allow_redirects)
+                resp = self.session.request(method, url, timeout=self.timeout, **kwargs)
             except requests.RequestException as exc:
                 if attempt == 1:
                     time.sleep(1)

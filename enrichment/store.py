@@ -9,7 +9,7 @@ a weaker source can never overwrite a stronger one.
 
 import re
 
-from psycopg2.extras import Json
+from psycopg2.extras import Json, execute_values
 
 import database
 
@@ -21,6 +21,7 @@ DEFAULT_METHOD = {
     "website": "html_rule",
     "ai_documents": "llm_document",
     "ai_website": "llm_website",
+    "discovery": "llm_website",
 }
 
 
@@ -83,6 +84,58 @@ def save_result(company_id, provider, result):
                 (result.website, company_id),
             )
     return count
+
+
+def save_sources_bulk(provider, items):
+    """Save many (company_id, SourceDoc) pairs from one provider in three
+    queries, however many companies: upsert every source, clear this
+    provider's facts on them, insert the new facts. For discovery, where
+    round trips to the hosted database, not data volume, are the cost.
+    Other sources of the same companies are left alone (no pruning)."""
+    items = [(cid, src) for cid, src in items if src.external_id]
+    if not items:
+        return 0
+    with database.cursor() as cur:
+        returned = execute_values(
+            cur,
+            """
+            INSERT INTO sources (company_id, provider, external_id, source_type, name, title, url,
+                                 published_on, notes)
+            VALUES %s
+            ON CONFLICT (company_id, provider, external_id) WHERE external_id IS NOT NULL
+            DO UPDATE SET source_type = EXCLUDED.source_type, name = EXCLUDED.name,
+                          title = EXCLUDED.title, url = EXCLUDED.url, notes = EXCLUDED.notes,
+                          retrieved_at = now()
+            RETURNING id, company_id, external_id;
+            """,
+            [(cid, provider, src.external_id, src.source_type, src.name, src.title,
+              src.url if _is_http(src.url) else None, src.published_on, src.notes) for cid, src in items],
+            fetch=True,
+        )
+        ids = {(r["company_id"], r["external_id"]): r["id"] for r in returned}
+        cur.execute("DELETE FROM facts WHERE source_id = ANY(%s) AND extracted_by = %s;",
+                    (list(ids.values()), provider))
+        rows = [
+            (cid, ids[(cid, src.external_id)], f.fact_type, f.value_text, f.value_number, f.currency,
+             f.period, f.period_start, f.period_end, f.as_of, f.evidence_type, f.confidence,
+             f.excerpt, f.location, f.notes, provider, f.extraction_method or DEFAULT_METHOD.get(provider),
+             f.extraction_model, f.verification, f.evidence_page)
+            for cid, src in items for f in src.facts
+        ]
+        if rows:
+            execute_values(
+                cur,
+                """
+                INSERT INTO facts (company_id, source_id, fact_type, value_text, value_number, currency,
+                                   period, period_start, period_end, as_of, evidence_type, confidence,
+                                   excerpt, location, notes, extracted_by, extraction_method,
+                                   extraction_model, verification, evidence_page)
+                VALUES %s;
+                """,
+                rows,
+                page_size=500,
+            )
+    return len(rows)
 
 
 def _upsert_source(cur, company_id, provider, src):

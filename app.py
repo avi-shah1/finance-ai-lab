@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 
 import database
+import jobs
 import screening
 from enrichment.runner import AI_LABELS, PROVIDER_LABELS, STRUCTURED_LABELS, enrich_company
 from profiles import CompanyProfile, build_profiles
@@ -131,7 +132,7 @@ def form_error_redirect(error, target):
 
 @app.route("/")
 def home():
-    companies = database.get_all_companies()
+    companies = database.get_all_companies(library_only=True)
     ids = [c["id"] for c in companies]
     profiles = build_profiles(companies, database.get_facts_for(ids), database.get_events_for(ids),
                               database.get_latest_runs(ids))
@@ -149,10 +150,13 @@ def create_search():
         return form_error_redirect("Buyer, target sector and geography are all required.",
                                    url_for("home"))
     buyer_id = database.find_or_create_company(buyer)
-    search_id = database.insert_search(buyer_id, sector, geography)
-    flash("Search created. Automated target discovery is not connected yet, "
-          "so add candidates manually for now.", "info")
+    search_id = database.insert_search(buyer_id, sector, geography, _text("criteria"))
+    jobs.start_search(search_id)
     return redirect(url_for("show_search", search_id=search_id))
+
+
+# Search statuses during which the page refreshes itself to show progress.
+RUNNING_STATUSES = ("queued", "discovering", "screening")
 
 
 @app.route("/searches/<int:search_id>")
@@ -162,22 +166,40 @@ def show_search(search_id):
     ids = [c["id"] for c in candidates]
     profiles = build_profiles(candidates, database.get_facts_for(ids), database.get_events_for(ids),
                               database.get_latest_runs(ids))
+    shown = [p for p in profiles if p.company["stage"] not in ("filtered_out", "dismissed")]
+    filtered = [p for p in profiles if p.company["stage"] == "filtered_out"]
 
     buyer_id = search["buyer_company_id"]
     buyer = _load_profile(buyer_id)
 
-    # Companies that could still be added: not the buyer, not already listed.
+    # Library companies that could still be added: not the buyer, not already listed.
     excluded = set(ids) | {buyer_id}
-    addable = [c for c in database.get_all_companies() if c["id"] not in excluded]
+    addable = [c for c in database.get_all_companies(library_only=True) if c["id"] not in excluded]
 
+    usage = database.get_usage_summary(search_id=search_id)
     return render_template(
         "search.html",
         search=search,
+        running=search["status"] in RUNNING_STATUSES,
         buyer=buyer,
-        profiles=profiles,
+        profiles=shown,
+        filtered=filtered,
         assessments=database.get_assessments(search_id, ids),
         addable=addable,
+        usage=usage,
+        total_cost=sum((u["cost_usd"] or 0) for u in usage),
     )
+
+
+@app.route("/searches/<int:search_id>/run", methods=["POST"])
+def rerun_search(search_id):
+    """Run discovery again, replacing this search's previous discovered results."""
+    search = database.get_search(search_id) or abort(404)
+    if search["status"] in RUNNING_STATUSES and jobs.is_running(search_id):
+        flash("This search is already running.", "info")
+    else:
+        jobs.start_search(search_id)
+    return redirect(url_for("show_search", search_id=search_id))
 
 
 @app.route("/searches/<int:search_id>/candidates", methods=["POST"])
@@ -416,4 +438,5 @@ def not_found(error):
 
 
 if __name__ == "__main__":
+    jobs.fail_interrupted()
     app.run(debug=True)

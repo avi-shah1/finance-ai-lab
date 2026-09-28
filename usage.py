@@ -63,12 +63,16 @@ def record_claude(task, meta, search_id=None, company_id=None):
             request_id=meta.get("request_id"))
 
 
-def record_service(service, task, unit, count, search_id=None, company_id=None):
-    """Record `count` billable units (e.g. 1 Exa search, 5 pages of text)."""
-    price = SERVICE_PRICES.get((service, unit))
+def record_service(service, task, unit, count, search_id=None, company_id=None, cost_usd=None):
+    """Record `count` billable units (e.g. 1 Exa search, 5 pages of text).
+    Pass `cost_usd` when the service reports what the call actually cost;
+    otherwise it is estimated from SERVICE_PRICES."""
+    if cost_usd is None:
+        price = SERVICE_PRICES.get((service, unit))
+        cost_usd = price * count if price is not None else None
     _record(service=service, task=task, model=None, input_tokens=0, output_tokens=0,
             cache_read_tokens=0, cache_write_tokens=0, units=count,
-            cost_usd=(price * count if price is not None else None),
+            cost_usd=cost_usd,
             search_id=search_id, company_id=company_id, request_id=None)
 
 

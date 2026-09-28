@@ -486,6 +486,52 @@ a.src-name { color: var(--accent); }
 .rating-avoid { color: var(--red); }
 .rating-insufficient_evidence { color: var(--grey); border-style: dashed; }
 
+/* ---- Discovery ---------------------------------------------------------- */
+
+.search-form .span-all { grid-column: 1 / -1; }
+.optional { text-transform: none; letter-spacing: normal; color: var(--faint); font-weight: 400; }
+.panel-hint { margin: -0.4rem 0 0.9rem; }
+
+.notice-running, .notice-failed { display: flex; align-items: center; gap: 0.8rem; color: var(--text); }
+.notice-running { border-left-color: var(--accent); background: rgba(56, 225, 255, 0.06); }
+.notice-failed { justify-content: space-between; border-left-color: var(--red); background: rgba(248, 113, 113, 0.08); }
+.spinner {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--line-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+.status-running { color: var(--accent); }
+.status-failed { color: var(--red); }
+
+.relevance {
+    display: inline-block;
+    margin-right: 0.3rem;
+    padding: 0.02rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+}
+.relevance-high { color: var(--green); }
+.relevance-medium { color: var(--amber); }
+.relevance-low { color: var(--grey); }
+
+.size-cell { white-space: nowrap; }
+.size-cell > div + div { margin-top: 0.2rem; }
+.filtered, .add-candidates { margin-top: 1rem; }
+.filtered-list, .decision-list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.filtered-list a.small { margin-left: 0.4rem; }
+.decision-list li { color: var(--muted); font-size: 0.88rem; }
+.usage-table { margin: 0.9rem 0; font-size: 0.85rem; }
+
 .coverage { display: flex; align-items: center; gap: 0.55rem; min-width: 150px; }
 .coverage-bar {
     flex: 1;
