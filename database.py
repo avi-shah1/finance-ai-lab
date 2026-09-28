@@ -382,6 +382,74 @@ def set_website_if_missing(company_id, website):
         )
 
 
+def set_deep_status(company_id, status, message=None, cost_usd=None):
+    """Track a company's deep research job: running -> complete / failed."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE companies
+            SET deep_status = %(status)s, deep_message = %(message)s,
+                deep_started_at = CASE WHEN %(status)s = 'running' AND coalesce(deep_status, '') <> 'running'
+                                       THEN now() ELSE deep_started_at END,
+                deep_finished_at = CASE WHEN %(status)s = 'running' THEN NULL ELSE now() END,
+                deep_cost_usd = CASE WHEN %(status)s = 'running' THEN NULL ELSE %(cost)s::numeric END
+            WHERE id = %(id)s;
+            """,
+            {"status": status, "message": message, "cost": cost_usd, "id": company_id},
+        )
+
+
+def fail_unfinished_deep_research(message):
+    """Called at startup: deep research threads die with the app process."""
+    with cursor() as cur:
+        cur.execute("UPDATE companies SET deep_status = 'failed', deep_message = %s, deep_finished_at = now() "
+                    "WHERE deep_status = 'running';", (message,))
+        return cur.rowcount
+
+
+def set_research_level(company_id, level):
+    """Raise a company's research level (discovered < screened < deep); never lower it."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE companies SET research_level = %(level)s
+            WHERE id = %(id)s AND array_position(ARRAY['discovered', 'screened', 'deep'], research_level)
+                                < array_position(ARRAY['discovered', 'screened', 'deep'], %(level)s);
+            """,
+            {"level": level, "id": company_id},
+        )
+
+
+def get_company_cost_since(company_id, since):
+    """Estimated spend on one company since a moment (e.g. a deep research run)."""
+    with cursor(readonly=True) as cur:
+        cur.execute("SELECT coalesce(sum(cost_usd), 0) AS cost FROM api_usage "
+                    "WHERE company_id = %s AND created_at >= %s;", (company_id, since))
+        return cur.fetchone()["cost"]
+
+
+def get_library():
+    """The company library as a research history: companies added by hand
+    or researched beyond discovery, with the searches they appeared in (as
+    target or buyer) and when they were last researched."""
+    with cursor(readonly=True) as cur:
+        cur.execute(
+            """
+            SELECT c.*,
+                   (SELECT count(*) FROM search_candidates sc WHERE sc.company_id = c.id) AS target_searches,
+                   (SELECT count(*) FROM searches s WHERE s.buyer_company_id = c.id) AS buyer_searches,
+                   (SELECT max(screened_at) FROM search_candidates sc WHERE sc.company_id = c.id) AS last_screened,
+                   greatest(c.deep_finished_at,
+                            (SELECT max(screened_at) FROM search_candidates sc WHERE sc.company_id = c.id),
+                            (SELECT max(finished_at) FROM research_runs r WHERE r.company_id = c.id)) AS last_researched
+            FROM companies c
+            WHERE c.research_level <> 'discovered'
+            ORDER BY last_researched DESC NULLS LAST, c.name;
+            """
+        )
+        return cur.fetchall()
+
+
 def set_derived_identifier(company_id, scheme, value):
     """Record an identifier read from another source (e.g. a company number
     printed on the company's website). Never replaces an existing one."""

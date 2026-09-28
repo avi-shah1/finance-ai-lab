@@ -34,7 +34,7 @@ Rules:
 - Returning an empty list is fine."""
 
 
-def gather_news(company, search_id=None, source=None):
+def gather_news(company, search_id=None, source=None, num_results=NUM_RESULTS, task="screening_news"):
     """Search, extract and store news events for a company.
     Returns (status, message, events_stored)."""
     source = source or ExaSource()
@@ -43,8 +43,8 @@ def gather_news(company, search_id=None, source=None):
     name = company["name"]
     query = (f"{name} ({company.get('domain') or ''}) news: funding, acquisition, partnership, "
              "product launch, expansion, leadership")
-    hits = source.search(query, category="news", num_results=NUM_RESULTS, search_id=search_id,
-                         task="screening_news_search", text_chars=TEXT_CHARS, company_id=company["id"])
+    hits = source.search(query, category="news", num_results=num_results, search_id=search_id,
+                         task=f"{task}_search", text_chars=TEXT_CHARS, company_id=company["id"])
     articles = [h for h in hits if mentions(company, h)]
     if not articles:
         store.save_events(company["id"], PROVIDER, [])
@@ -58,7 +58,7 @@ def gather_news(company, search_id=None, source=None):
     ]
     content = [{"type": "text", "text": (
         f"Company: {name} (website: {company.get('domain') or 'unknown'})\n\n" + "\n\n".join(blocks))}]
-    parsed, meta = llm.extract(SYSTEM, content, NewsExtraction, task="screening_news", max_tokens=4000,
+    parsed, meta = llm.extract(SYSTEM, content, NewsExtraction, task=task, max_tokens=6000,
                                search_id=search_id, company_id=company["id"])
 
     by_article, rejected = {}, 0

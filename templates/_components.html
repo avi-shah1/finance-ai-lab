@@ -279,25 +279,75 @@
 
 {# ---- Research panel -------------------------------------------------- #}
 
-{% macro research_panel(profile, next_url) %}
+{# Deep research (Level 3): estimate before, progress during, actual cost after. #}
+{% macro deep_research_panel(company, search, candidate, estimate, running, next_url) %}
+    <section class="panel deep-panel" id="deep">
+        <div class="panel-head">
+            <div>
+                <h2>Deep research</h2>
+                <p class="muted small">Filed accounts read by AI, the full website, registers in full and a larger news search{% if candidate %}, then the report above is re-assessed{% endif %}. Runs only when you ask.</p>
+            </div>
+            <span class="rating rating-{{ {'deep': 'strong', 'screened': 'mixed'}.get(company.research_level, 'none') }}">
+                {{ {"deep": "Deep researched", "screened": "Screened", "discovered": "Discovered only"}[company.research_level] }}
+            </span>
+        </div>
+        {% if running %}
+            <div class="notice notice-running" role="status">
+                <span class="spinner" aria-hidden="true"></span>
+                <div><strong>Deep research running…</strong> {{ company.deep_message or "" }}
+                    <div class="muted small">Usually 1–3 minutes. This page updates by itself.</div></div>
+            </div>
+        {% else %}
+            {% if company.deep_status == "complete" %}
+                <p class="deep-last">Last run {{ company.deep_finished_at | fmt_datetime }}: {{ company.deep_message }}
+                    {% if company.deep_cost_usd is not none %}<strong>Actual cost ${{ "%.3f" | format(company.deep_cost_usd) }}.</strong>{% endif %}</p>
+            {% elif company.deep_status == "failed" %}
+                <p class="notice notice-failed">Last run failed: {{ company.deep_message }}</p>
+            {% endif %}
+            {% if estimate %}
+                <table class="data-table estimate-table">
+                    <thead><tr><th>Step</th><th>What</th><th class="num">Estimated cost</th></tr></thead>
+                    <tbody>
+                        {% for s in estimate.steps %}
+                            <tr><td>{{ s.label }}</td><td class="muted">{{ s.note }}</td>
+                                <td class="num">{% if s.high == 0 %}free{% else %}${{ "%.3f" | format(s.low) }}–{{ "%.3f" | format(s.high) }}{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot><tr><th colspan="2">Total</th>
+                        <th class="num">${{ "%.2f" | format(estimate.low) }}–{{ "%.2f" | format(estimate.high) }}</th></tr></tfoot>
+                </table>
+                <form method="post" action="{{ url_for('start_deep_research', company_id=company.id) }}" class="deep-form">
+                    {% if candidate %}<input type="hidden" name="search_id" value="{{ search.id }}">{% endif %}
+                    <input type="hidden" name="next" value="{{ next_url }}">
+                    <button class="btn btn-primary" type="submit">{{ "Run deep research again" if company.deep_status == "complete" else "Run deep research" }} (≈ ${{ "%.2f" | format(estimate.low) }}–{{ "%.2f" | format(estimate.high) }})</button>
+                    <span class="muted small">The actual cost is shown here when it finishes.</span>
+                </form>
+            {% endif %}
+        {% endif %}
+    </section>
+{% endmacro %}
+
+{% macro research_panel(profile, next_url, buttons=true) %}
     {% set c = profile.company %}
     <section class="panel research" id="research">
         <div class="panel-head">
             <div>
-                <h2>Research</h2>
+                <h2>{{ "Research" if buttons else "Sources checked" }}</h2>
                 <p class="muted small">
                     {% if profile.last_researched %}Last run {{ profile.last_researched | fmt_datetime }}{% else %}Not researched yet{% endif %}
                 </p>
             </div>
-            <form method="post" action="{{ url_for('run_research', company_id=c.id) }}" class="research-form">
-                <input type="hidden" name="next" value="{{ next_url }}">
-                <button class="btn btn-primary" type="submit" data-busy="Researching… (up to a minute)">{{ "Re-run research" if profile.runs else "Run research" }}</button>
-            </form>
+            {% if buttons %}
+                <form method="post" action="{{ url_for('run_research', company_id=c.id) }}" class="research-form">
+                    <input type="hidden" name="next" value="{{ next_url }}">
+                    <button class="btn btn-primary" type="submit" data-busy="Researching… (up to a minute)">{{ "Re-run research" if profile.runs else "Run research" }}</button>
+                </form>
+            {% endif %}
         </div>
 
         <h3 class="subhead">Structured sources</h3>
         <ul class="provider-list">
-            {% for name, label in structured_labels.items() %}
+            {% for name, label in (structured_labels.items() | list) + [("news", "News")] %}
                 {% set run = profile.runs.get(name) %}
                 <li class="provider">
                     <div class="provider-head">
@@ -329,10 +379,12 @@
                     <h3 class="subhead">AI extraction (Claude)</h3>
                     <p class="muted small">Reads PDF accounts and web pages already retrieved above and extracts only explicitly stated facts. Every quote is checked against the source before storing. Uses the Anthropic API (paid per run); unchanged documents are skipped.</p>
                 </div>
-                <form method="post" action="{{ url_for('run_ai_extraction', company_id=c.id) }}">
-                    <input type="hidden" name="next" value="{{ next_url }}">
-                    <button class="btn btn-ai" type="submit" data-busy="Extracting… (can take a couple of minutes)">Run AI extraction</button>
-                </form>
+                {% if buttons %}
+                    <form method="post" action="{{ url_for('run_ai_extraction', company_id=c.id) }}">
+                        <input type="hidden" name="next" value="{{ next_url }}">
+                        <button class="btn btn-ai" type="submit" data-busy="Extracting… (can take a couple of minutes)">Run AI extraction</button>
+                    </form>
+                {% endif %}
             </div>
             <ul class="provider-list">
                 {% for name, label in ai_labels.items() %}
@@ -422,12 +474,13 @@
 {% endmacro %}
 
 {# Candidate/company table. On narrow screens CSS turns rows into cards. #}
-{% macro company_table(profiles, search=None, assessments=None) %}
+{% macro company_table(profiles, search=None, assessments=None, library=false) %}
     <div class="table-wrap">
         <table class="data-table company-table">
             <thead>
                 <tr>
                     <th>Company</th>
+                    {% if library %}<th>Research</th><th>Searches</th>{% endif %}
                     <th>Description</th>
                     <th>Location</th>
                     <th class="num">Employees</th>
@@ -448,6 +501,17 @@
                             <a class="company-link" href="{{ link }}">{{ c.name }}</a>
                             {% if c.sector %}<div class="muted small">{{ c.sector }}</div>{% endif %}
                         </td>
+                        {% if library %}
+                            <td data-label="Research">
+                                <span class="rating level-badge rating-{{ {'deep': 'strong', 'screened': 'mixed'}.get(c.research_level, 'none') }}">{{ {"deep": "Deep", "screened": "Screened"}.get(c.research_level, c.research_level) | capitalize }}</span>
+                                {% if c.last_researched %}<div class="muted small">{{ c.last_researched | fmt_date }}</div>{% endif %}
+                            </td>
+                            <td data-label="Searches" class="small">
+                                {% if c.target_searches %}Target in {{ c.target_searches }}{% endif %}
+                                {% if c.buyer_searches %}<div>Buyer in {{ c.buyer_searches }}</div>{% endif %}
+                                {% if not c.target_searches and not c.buyer_searches %}<span class="muted">Added by hand</span>{% endif %}
+                            </td>
+                        {% endif %}
                         <td data-label="Description" class="desc">
                             {% set d = p.fact("description") %}
                             {{ d.value_text | truncate(110) if d else unknown(p.unknown_reason("description")) }}

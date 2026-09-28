@@ -34,6 +34,7 @@ TASK_MODELS = {
     # Deep research (only when requested)
     "deep_documents": HAIKU,     # figures from filed PDF accounts
     "deep_website": HAIKU,       # facts from the company's website pages
+    "deep_news": HAIKU,          # dated events from a larger set of news articles
 }
 
 # Sonnet thinks before answering by default, and thinking is billed as

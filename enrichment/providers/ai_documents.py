@@ -8,6 +8,14 @@ Output: facts attached to the ORIGINAL filing source (so the Companies House
         document link is preserved), stored as evidence_type 'ai_extracted',
         extraction_method 'llm_document', with the page they came from.
 
+Two ways of reading a document:
+  * text mode (cheap, used whenever the PDF has a text layer): only the
+    text of the key pages (balance sheet, profit and loss, employees...)
+    is sent. About 5-10x fewer tokens than the whole PDF. Table layout is
+    lost in plain text, so these facts are capped at medium confidence.
+  * full mode (scanned PDFs): the PDF itself is sent, and Claude reads the
+    page images.
+
 Every figure must pass two checks before it is stored:
   1. the number is printed in the quoted evidence (no derived figures);
   2. the quote is found on the cited page's text, when the page has a text
@@ -33,6 +41,32 @@ MAX_PDF_BYTES = 30 * 1024 * 1024
 KEY_PAGE_PATTERN = re.compile(
     r"turnover|revenue|profit and loss|income statement|balance sheet|statement of financial position|"
     r"employees|creditors|cash at bank|net assets|auditor", re.I)
+TEXT_MODE_MAX_PAGES = 14      # key pages sent in text mode
+TEXT_MODE_PAGE_CHARS = 6000
+TEXT_MODE_NOTE = ("The document is given as the extracted text of selected pages, each in a <page> tag with its "
+                  "original page number: use that number for 'page'. Table columns are flattened into lines; "
+                  "the current period's figure usually comes before the prior year's. If you cannot tell which "
+                  "figure is the current period's, return null.")
+
+
+_CONFIDENCE_ORDER = ["low", "medium", "high"]
+
+
+def _cap(confidence, maximum):
+    if maximum is None:
+        return confidence
+    return min(confidence, maximum, key=_CONFIDENCE_ORDER.index)
+
+
+def has_text_layer(page_texts):
+    return sum(len(t.strip()) for t in page_texts) > 200
+
+
+def key_pages(page_texts):
+    """0-based pages to send in text mode: the first two (company name,
+    period) plus those mentioning the figures we look for."""
+    keep = [i for i, t in enumerate(page_texts) if i < 2 or KEY_PAGE_PATTERN.search(t)]
+    return keep[:TEXT_MODE_MAX_PAGES]
 
 FIGURE_FIELDS = ["revenue", "operating_profit", "profit_before_tax", "net_income", "cash", "total_debt",
                  "creditors_due_within_one_year", "creditors_due_after_one_year",
@@ -57,6 +91,11 @@ Rules:
 class AIDocuments(Provider):
     name = "ai_documents"
     label = "AI: filed accounts (PDF)"
+
+    def __init__(self, mode="auto", task="deep_documents"):
+        # auto: text mode where the PDF has text, full mode for scans.
+        # full: always send the whole PDF (the original behaviour).
+        self.mode, self.task = mode, task
 
     def _candidates(self, ctx):
         docs = [s for s in ctx.sources
@@ -117,7 +156,9 @@ class AIDocuments(Provider):
         from pypdf import PdfReader, PdfWriter
         reader = PdfReader(io.BytesIO(pdf))
         page_texts = [(p.extract_text() or "") for p in reader.pages]
-        has_text = sum(len(t.strip()) for t in page_texts) > 200
+        has_text = has_text_layer(page_texts)
+        if has_text and self.mode == "auto":
+            return self._extract_text_mode(ctx, src, page_texts)
 
         # Which original pages we send (0-based). Long documents with a text
         # layer are trimmed to the pages that mention the figures we need.
@@ -151,13 +192,30 @@ class AIDocuments(Provider):
                 + (f"Expected period end (from the filing record): {src['period_end']}\n" if src.get("period_end") else "")
                 + "Extract the figures described by the schema. Return null for any figure not explicitly printed.")},
         ]
-        parsed, meta = llm.extract(SYSTEM, content, AccountsExtraction, task="deep_documents",
-                                   company_id=ctx.company.get("id"))
+        parsed, meta = llm.extract(SYSTEM, content, AccountsExtraction, task=self.task,
+                                   company_id=ctx.company.get("id"), search_id=ctx.search_id)
         facts, rejected = self._to_facts(parsed, src, page_texts, mapping, meta["model"])
-        notes = " ".join(n for n in (parsed.notes, scope_note) if n) or None
+        notes = " ".join(n for n in (parsed.notes, scope_note, "Read as whole PDF.") if n) or None
         return facts, rejected, meta, notes
 
-    def _to_facts(self, parsed, src, page_texts, mapping, model):
+    def _extract_text_mode(self, ctx, src, page_texts):
+        pages = key_pages(page_texts)
+        blocks = [f'<page number="{i + 1}">\n{page_texts[i][:TEXT_MODE_PAGE_CHARS]}\n</page>' for i in pages]
+        content = [{"type": "text", "text": (
+            f"Company: {ctx.company['name']}\n"
+            f"Document: {src.get('title')}\n"
+            + (f"Expected period end (from the filing record): {src['period_end']}\n" if src.get("period_end") else "")
+            + f"{TEXT_MODE_NOTE}\n\n" + "\n\n".join(blocks)
+            + "\n\nExtract the figures described by the schema. Return null for any figure not explicitly printed.")}]
+        parsed, meta = llm.extract(SYSTEM, content, AccountsExtraction, task=self.task,
+                                   company_id=ctx.company.get("id"), search_id=ctx.search_id)
+        # Page numbers in the answer are original page numbers: identity mapping.
+        facts, rejected = self._to_facts(parsed, src, page_texts, list(range(len(page_texts))), meta["model"],
+                                         method="llm_document_text", max_confidence="medium")
+        note = f"Read as text: {len(pages)} of {len(page_texts)} pages (those with key financial terms)."
+        return facts, rejected, meta, " ".join(n for n in (parsed.notes, note) if n)
+
+    def _to_facts(self, parsed, src, page_texts, mapping, model, method="llm_document", max_confidence=None):
         start = formatting.parse_date(parsed.period_start)
         end = formatting.parse_date(parsed.period_end) or src.get("period_end")
         facts, rejected = [], []
@@ -185,7 +243,7 @@ class AIDocuments(Provider):
                 continue
 
             verifiable = len(text.strip()) >= 50
-            confidence = fig.confidence if verifiable or fig.confidence == "low" else "medium"
+            confidence = _cap(fig.confidence if verifiable or fig.confidence == "low" else "medium", max_confidence)
             printed = Decimal(str(fig.value))
             if field in AMOUNT_OWED_FIELDS:
                 # Balance sheets print creditors in brackets because they are
@@ -211,7 +269,7 @@ class AIDocuments(Provider):
                 location=f"Page {page_no} of {src.get('title')}",
                 evidence_page=page_no,
                 notes=(f"Printed as {formatting.count(printed) if printed == printed.to_integral_value() else printed} in units of {fig.unit_multiplier:,}." if fig.unit_multiplier > 1 else None),
-                extraction_method="llm_document", extraction_model=model,
+                extraction_method=method, extraction_model=model,
                 verification="quote_verified" if verifiable else "not_verifiable",
             ))
 
@@ -221,11 +279,11 @@ class AIDocuments(Provider):
                 facts.append(Fact(
                     fact_type="auditor", value_text=formatting.squash(parsed.auditor.value, 120),
                     evidence_type="ai_extracted",
-                    confidence=(parsed.auditor.confidence if len(text.strip()) >= 50 or parsed.auditor.confidence == "low"
-                                else "medium"),
+                    confidence=_cap(parsed.auditor.confidence if len(text.strip()) >= 50
+                                    or parsed.auditor.confidence == "low" else "medium", max_confidence),
                     excerpt=formatting.squash(parsed.auditor.evidence_text, 300),
                     location=f"Page {page_no} of {src.get('title')}", evidence_page=page_no,
-                    extraction_method="llm_document", extraction_model=model,
+                    extraction_method=method, extraction_model=model,
                     verification="quote_verified" if len(text.strip()) >= 50 else "not_verifiable",
                 ))
             else:

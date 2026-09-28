@@ -8,6 +8,7 @@ from flask import Flask, abort, flash, redirect, render_template, request, url_f
 import database
 import jobs
 import screening
+from screener import deep
 from enrichment.runner import AI_LABELS, PROVIDER_LABELS, STRUCTURED_LABELS, enrich_company
 from profiles import CompanyProfile, build_profiles
 
@@ -132,7 +133,7 @@ def form_error_redirect(error, target):
 
 @app.route("/")
 def home():
-    companies = database.get_all_companies(library_only=True)
+    companies = database.get_library()
     ids = [c["id"] for c in companies]
     profiles = build_profiles(companies, database.get_facts_for(ids), database.get_events_for(ids),
                               database.get_latest_runs(ids))
@@ -284,6 +285,9 @@ def set_candidate_stage(search_id, company_id):
     if stage not in CANDIDATE_ACTIONS:
         abort(400)
     database.set_candidate_stage(search_id, company_id, stage)
+    if stage == "shortlisted":
+        flash("Shortlisted. Open its report to run Deep Research (filed accounts, full website, "
+              "more news) when you want more certainty.", "info")
     return redirect(_next_url(url_for("show_search", search_id=search_id)))
 
 
@@ -411,11 +415,15 @@ def show_company(company_id):
     # every cited fact/event, not just this company's.
     cited_facts = {f for row in ai_assessment.values() for f in row["fact_ids"]}
     cited_events = {e for row in ai_assessment.values() for e in row["event_ids"]}
+    company = profile.company
+    deep_running = company["deep_status"] == "running"
     return render_template(
         "company.html",
         profile=profile,
         search=search,
         candidate=candidate,
+        deep_running=deep_running,
+        deep_estimate=None if deep_running else deep.estimate(company_id, search["id"] if candidate else None),
         running=bool(search) and search["status"] in RUNNING_STATUSES,
         assessments=assessments,
         ai_assessment=ai_assessment,
@@ -526,6 +534,22 @@ def update_identifiers(company_id):
     database.set_identifier(company_id, "ticker", ticker)
     flash("Identity details saved. Run research to fetch sources.", "info")
     return redirect(back)
+
+
+@app.route("/companies/<int:company_id>/deep-research", methods=["POST"])
+def start_deep_research(company_id):
+    """Level 3 research in the background. The page shows the estimate
+    before this is clicked and the actual cost afterwards."""
+    database.get_company(company_id) or abort(404)
+    search_id = request.form.get("search_id", type=int)
+    if search_id and not database.get_search(search_id):
+        search_id = None
+    back = _next_url(url_for("show_company", company_id=company_id, search=search_id))
+    if jobs.start_deep_research(company_id, search_id=search_id):
+        flash("Deep research started. It usually takes 1–3 minutes; this page updates by itself.", "info")
+    else:
+        flash("Deep research is already running for this company.", "info")
+    return redirect(back.split("#")[0] + "#deep")
 
 
 @app.route("/companies/<int:company_id>/research", methods=["POST"])

@@ -3,6 +3,9 @@
 
 {% block title %}{{ profile.company.name }}{% endblock %}
 
+{# While deep research runs, reload every 5 seconds to show progress. #}
+{% block head %}{% if deep_running %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+
 {% block content %}
 {% set c = profile.company %}
 <nav class="crumbs">
@@ -35,6 +38,11 @@
 {% if search %}
     {# The assessment comes first; the raw evidence it draws on follows. #}
     {% include "_report.html" %}
+{% endif %}
+
+{{ ui.deep_research_panel(c, search, candidate, deep_estimate, deep_running, request.full_path) }}
+
+{% if search %}
     <h2 class="section-divider" id="evidence">Evidence on file</h2>
 {% endif %}
 
@@ -47,6 +55,7 @@
             <a href="#report">Verdict</a>
             {% for d in vocab.DIMENSIONS %}<a href="#{{ d.code }}">{{ d.label }}</a>{% endfor %}
         {% endif %}
+        <a href="#deep">Deep research</a>
         <span class="nav-group">Evidence</span>
         <a href="#research">Research</a>
         <a href="#overview">Overview</a>
@@ -62,7 +71,7 @@
     </nav>
 
     <div class="sections">
-        {{ ui.research_panel(profile, request.full_path) }}
+        {{ ui.research_panel(profile, request.full_path, buttons=false) }}
 
         <section class="panel" id="overview">
             <h2>Overview</h2>

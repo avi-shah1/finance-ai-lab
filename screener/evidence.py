@@ -70,11 +70,11 @@ def gather(company_id, search_id=None, website_pages=WEBSITE_PAGES, ai_pages=AI_
     return summaries
 
 
-def _news_step(company, search_id):
+def _news_step(company, search_id, num_results=news.NUM_RESULTS, task="screening_news"):
     run_id = store.start_run(company["id"], news.PROVIDER)
     status, message, count = "error", "", 0
     try:
-        status, message, count = news.gather_news(company, search_id=search_id)
+        status, message, count = news.gather_news(company, search_id=search_id, num_results=num_results, task=task)
     except EnrichmentError as exc:
         status, message = exc.status, str(exc)
     except Exception as exc:

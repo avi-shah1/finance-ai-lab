@@ -92,8 +92,35 @@ def start_screening(search_id, company_ids, gather=True):
     return True
 
 
+_deep_running = set()   # company ids with deep research running in this process
+
+
+def start_deep_research(company_id, search_id=None):
+    """Run deep research for a company in the background. Returns False if
+    it is already running."""
+    from screener import deep
+    with _lock:
+        if company_id in _deep_running:
+            return False
+        _deep_running.add(company_id)
+
+    def work():
+        try:
+            deep.run(company_id, search_id=search_id)
+        except Exception as exc:
+            log.exception("Deep research failed for company %s", company_id)
+            database.set_deep_status(company_id, "failed", f"{type(exc).__name__}: {exc}"[:500])
+        finally:
+            with _lock:
+                _deep_running.discard(company_id)
+
+    database.set_deep_status(company_id, "running", "Starting")
+    threading.Thread(target=work, name=f"deep-{company_id}", daemon=True).start()
+    return True
+
+
 def fail_interrupted():
-    count = database.fail_unfinished_searches(
-        "Interrupted: the app restarted while this search was running. Click 'Run again'.")
+    message = "Interrupted: the app restarted while this was running. Run it again."
+    count = database.fail_unfinished_searches(message) + database.fail_unfinished_deep_research(message)
     if count:
-        log.warning("Marked %s interrupted search(es) as failed", count)
+        log.warning("Marked %s interrupted job(s) as failed", count)

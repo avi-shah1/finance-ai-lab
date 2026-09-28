@@ -60,9 +60,9 @@
         <h2>Company library</h2>
         <span class="muted">{{ profiles | length }} compan{{ "y" if profiles | length == 1 else "ies" }}</span>
     </div>
-    <p class="hint panel-hint">Companies you added or researched. Companies a search only discovered are listed in that search.</p>
+    <p class="hint panel-hint">Your research history: every company that has been screened, deep-researched or added by hand, most recent first. Companies a search only discovered are listed in that search.</p>
     {% if profiles %}
-        {{ ui.company_table(profiles) }}
+        {{ ui.company_table(profiles, library=true) }}
     {% else %}
         {{ ui.empty_state("No companies yet.") }}
     {% endif %}

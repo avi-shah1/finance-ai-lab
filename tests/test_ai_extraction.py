@@ -106,7 +106,7 @@ class AIDocumentsTests(unittest.TestCase):
     def test_verified_facts_stored_and_bad_ones_rejected(self):
         meta = {"model": "claude-opus-5", "input_tokens": 1000, "output_tokens": 200, "request_id": "req_1"}
         with mock.patch.object(llm, "extract", return_value=(self.canned(), meta)) as call:
-            result = AIDocuments().run(self.ctx)
+            result = AIDocuments(mode="full").run(self.ctx)
 
         # The PDF was sent as a base64 document block.
         content = call.call_args.args[1]
@@ -132,6 +132,32 @@ class AIDocumentsTests(unittest.TestCase):
         self.assertNotIn("net_income", facts)
         self.assertIn("net_income", result.detail["not_disclosed"])      # unknown, not guessed
         self.assertEqual(result.attach[10]["content_sha256"], self.src["content_sha256"])
+
+    @mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test"})
+    def test_text_mode_sends_key_page_text_and_caps_confidence(self):
+        meta = {"model": "claude-haiku-4-5", "input_tokens": 900, "output_tokens": 200, "request_id": "req_t"}
+        with mock.patch.object(llm, "extract", return_value=(self.canned(), meta)) as call:
+            result = AIDocuments().run(self.ctx)      # default: auto -> text mode for a text PDF
+
+        content = call.call_args.args[1]
+        self.assertEqual([b["type"] for b in content], ["text"])          # no PDF block
+        text = content[0]["text"]
+        self.assertIn('<page number="2">', text)
+        self.assertIn("Turnover 3 12,400 11,020", text)
+        self.assertEqual(call.call_args.kwargs["task"], "deep_documents")
+
+        facts = {f.fact_type: f for f in result.attach[10]["facts"]}
+        rev = facts["revenue"]
+        self.assertEqual(rev.value_number, Decimal("12400000"))
+        self.assertEqual((rev.extraction_method, rev.confidence), ("llm_document_text", "medium"))   # capped
+        self.assertEqual((rev.evidence_page, rev.verification), (2, "quote_verified"))
+        self.assertNotIn("profit_before_tax", facts)                       # same checks still apply
+        self.assertIn("Read as text", result.detail["documents"][0]["notes"])
+
+    def test_key_pages(self):
+        from enrichment.providers.ai_documents import key_pages
+        texts = ["cover", "contents", "strategic report", "Balance sheet", "notes", "Average employees 12"]
+        self.assertEqual(key_pages(texts), [0, 1, 3, 5])
 
     @mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test"})
     def test_unchanged_document_is_not_sent_again(self):

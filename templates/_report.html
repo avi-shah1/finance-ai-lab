@@ -96,6 +96,7 @@
                 {% else %}
                     <span class="muted small">Search running…</span>
                 {% endif %}
+                <a class="btn btn-sm btn-deep" href="#deep">{{ "Deep research running…" if deep_running else ("Deep researched ✓" if c.research_level == "deep" else "Deep research ↓") }}</a>
             </div>
         {% endif %}
     </div>

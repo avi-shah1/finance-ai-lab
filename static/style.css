@@ -602,6 +602,18 @@ a.cite:hover { color: var(--text); text-decoration: none; }
     .dim-tiles, .report-dim .facts-vs-view { grid-template-columns: 1fr; }
 }
 
+/* Deep research panel */
+.deep-panel { margin-top: 1rem; scroll-margin-top: 76px; display: flex; flex-direction: column; gap: 0.8rem; }
+.deep-last { margin: 0; }
+.estimate-table { font-size: 0.86rem; }
+.estimate-table tfoot th { text-align: left; padding: 0.55rem 0.8rem; border-top: 1px solid var(--line-strong); }
+.estimate-table tfoot th.num { text-align: right; }
+.deep-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; }
+.btn-deep { text-align: center; }
+
+/* Library as research history */
+.level-badge { font-size: 0.72rem; }
+
 /* Assessment detail (company page) */
 .candidate-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; margin-bottom: 0.9rem; }
 .candidate-bar .btn-sm { margin-top: 0; }
