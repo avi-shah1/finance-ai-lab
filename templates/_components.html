@@ -604,8 +604,10 @@
                             {{ screening_summary(c, assessments.get(c.id, {}), search) }}
                             {% set h = headlines.get(c.id) %}
                             {% if h and (h.headline or h.rationale) %}
-                                <p class="verdict-line">{{ (h.headline or h.rationale) | truncate(170) }}
-                                    <a href="{{ url_for('show_company', company_id=c.id, search=search.id) }}#report">Why →</a></p>
+                                <p class="verdict-line">{{ (h.headline or h.rationale) | truncate(170) }}</p>
+                            {% endif %}
+                            {% if assessments.get(c.id) %}
+                                <a class="btn btn-sm btn-report" href="{{ url_for('show_company', company_id=c.id, search=search.id) }}#report">View report →</a>
                             {% endif %}
                         </td>
                         <td data-label="Evidence">

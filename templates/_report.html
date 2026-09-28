@@ -76,6 +76,7 @@
                 <p class="headline muted">This company isn't a candidate in this search.</p>
             {% endif %}
         </div>
+        <div class="report-side">
         {% if candidate %}
             <div class="report-actions">
                 <span class="muted small">Stage: <strong>{{ candidate.stage | replace("_", " ") | capitalize }}</strong></span>
@@ -96,9 +97,27 @@
                 {% else %}
                     <span class="muted small">Search running…</span>
                 {% endif %}
-                <a class="btn btn-sm btn-deep" href="#deep">{{ "Deep research running…" if deep_running else ("Deep researched ✓" if c.research_level == "deep" else "Deep research ↓") }}</a>
             </div>
         {% endif %}
+        {# Deep research has its own button, with the estimate on it. #}
+        <div class="deep-cta">
+            {% if deep_running %}
+                <a class="btn btn-deep is-running" href="#deep"><span class="spinner" aria-hidden="true"></span> Deep research running…</a>
+            {% elif deep_estimate %}
+                {% if c.research_level == "deep" %}<span class="deep-done">✓ Deep researched {{ c.deep_finished_at | fmt_date }}</span>{% endif %}
+                <form method="post" action="{{ url_for('start_deep_research', company_id=c.id) }}">
+                    {% if candidate %}<input type="hidden" name="search_id" value="{{ search.id }}">{% endif %}
+                    <input type="hidden" name="next" value="{{ request.full_path }}">
+                    <button class="btn btn-primary btn-deep" type="submit"
+                            title="Filed accounts, full website, registers in full and more news{% if candidate %}, then this report is re-assessed{% endif %}">
+                        {{ "Run deep research again" if c.research_level == "deep" else "Run deep research" }}
+                        <span class="btn-cost">≈ ${{ "%.2f" | format(deep_estimate.low) }}–{{ "%.2f" | format(deep_estimate.high) }}</span>
+                    </button>
+                </form>
+                <a class="small" href="#deep">What it does &amp; cost breakdown ↓</a>
+            {% endif %}
+        </div>
+        </div>
     </div>
 
     {% if ai_assessment %}
