@@ -3,6 +3,9 @@
 
 {% block title %}{{ search.buyer_name }} · {{ search.target_sector }}{% endblock %}
 
+{# The results table uses the full browser width. #}
+{% block page_class %}page-wide{% endblock %}
+
 {# While the background job runs, reload every 4 seconds to show progress. #}
 {% block head %}{% if running %}<meta http-equiv="refresh" content="4">{% endif %}{% endblock %}
 

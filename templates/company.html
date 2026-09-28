@@ -75,6 +75,11 @@
 
         <section class="panel" id="overview">
             <h2>Overview</h2>
+            {% if profile.fact("business_summary") %}
+                <h3 class="subhead">What they do</h3>
+                {{ ui.what_they_do(profile) }}
+                <h3 class="subhead">In their own words</h3>
+            {% endif %}
             {% set d = profile.fact("description") %}
             {% if d %}
                 <p class="lede">{{ d.value_text }}</p>

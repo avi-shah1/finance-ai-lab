@@ -335,6 +335,12 @@ textarea { resize: vertical; }
 .company-link::after { content: " →"; font-weight: 400; opacity: 0; transition: opacity 0.12s; }
 .company-link:hover::after { opacity: 1; }
 .company-table .desc { max-width: 280px; color: var(--muted); }
+.page-wide { max-width: none; }
+.page-wide .company-table .desc { max-width: none; }
+.page-wide .verdict-line { max-width: none; }
+.what-cell { min-width: 260px; }
+.what-bullets { margin: 0; padding-left: 1rem; display: flex; flex-direction: column; gap: 0.2rem; color: var(--text); font-size: 0.86rem; line-height: 1.4; }
+.what-bullets li::marker { color: var(--faint); }
 .actions { width: 1%; }
 
 /* ---- Evidence components ------------------------------------------------ */

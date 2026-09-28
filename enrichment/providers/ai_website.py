@@ -31,7 +31,8 @@ Rules:
 - Ignore navigation boilerplate, cookie banners, job adverts, and marketing slogans that are not facts.
 - source_url must be exactly one of the page URLs given. evidence_text must be copied character-for-character from that page.
 - Keep value short (a name, not a sentence). If unsure whether something qualifies, leave it out.
-- Returning an empty list is acceptable."""
+- Returning an empty list of items is acceptable.
+- summary: 2-3 neutral, third-person bullets on what the company does, based on the pages. Rewrite the site's marketing in plain words: never "you", "we" or slogans."""
 
 
 class AIWebsite(Provider):
@@ -108,12 +109,22 @@ class AIWebsite(Provider):
                 extraction_model=meta["model"], verification="quote_verified",
             ))
 
+        # "What they do": a neutral summary of the pages, on the homepage source.
+        summary = formatting.clean_bullets(parsed.summary)
+        home = next((p for p in pages if p["id"] in facts_by_source), None)
+        if summary and home:
+            facts_by_source[home["id"]].append(Fact(
+                fact_type="business_summary", value_text=summary, evidence_type="ai_interpretation",
+                confidence="medium", location=home["url"], extraction_method="llm_website",
+                extraction_model=meta["model"],
+                notes=f"AI summary of {len(blocks)} page{'s' if len(blocks) != 1 else ''} of the company's website."))
+
         result = ProviderResult()
         for page in pages:
             if page["id"] in facts_by_source:
                 result.attach[page["id"]] = {"facts": facts_by_source[page["id"]],
                                              "content_sha256": page.get("content_sha256")}
-        stored = sum(len(f) for f in facts_by_source.values())
+        stored = sum(len(f) for f in facts_by_source.values()) - (1 if summary and home else 0)
         result.message = (f"{stored} facts from {len(blocks)} pages"
                           + (f"; {len(rejected)} rejected by verification" if rejected else "") + ".")
         result.detail = {"rejected": rejected, "model": meta["model"], "input_tokens": meta["input_tokens"],

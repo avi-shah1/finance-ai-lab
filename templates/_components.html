@@ -549,6 +549,20 @@
 {% endmacro %}
 
 
+{# "What they do": Claude's neutral 2-3 bullets, falling back to a
+   one-line description for companies found before bullets existed. #}
+{% macro what_they_do(p) %}
+    {% set s = p.fact("business_summary") %}
+    {% if s %}
+        <ul class="what-bullets" title="{{ s.notes or 'AI summary' }}">
+            {% for line in s.value_text.split("\n") if line.strip() %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+    {% else %}
+        {% set d = p.fact("description") %}
+        {% if d %}{{ d.value_text | truncate(160) }}{% else %}{{ unknown("No evidence") }}{% endif %}
+    {% endif %}
+{% endmacro %}
+
 {# The preferred value of a fact with its evidence dot, or "Not stated". #}
 {% macro fact_or_unknown(p, code) %}
     {% set f = p.fact(code) %}
@@ -582,10 +596,7 @@
                             {% if site %}<div class="small"><a href="{{ site }}" target="_blank" rel="noopener noreferrer">{{ c.domain or c.website }}<span aria-hidden="true"> ↗</span></a></div>{% endif %}
                             <div class="muted small">{% if c.origin == "manual" %}Added manually{% else %}Found via {{ c.discovered_via | map("capitalize") | join(", ") }}{% endif %}</div>
                         </td>
-                        <td data-label="What they do" class="desc">
-                            {% set d = p.fact("description") %}
-                            {% if d %}<span class="ev-dot ev-{{ vocab.EVIDENCE_GROUPS[d.evidence_type] }}" title="{{ vocab.EVIDENCE_TYPES[d.evidence_type] }} · {{ d.source_title or d.source_name }}"></span>{{ d.value_text | truncate(140) }}{% else %}{{ unknown("Not researched") }}{% endif %}
-                        </td>
+                        <td data-label="What they do" class="desc what-cell">{{ what_they_do(p) }}</td>
                         <td data-label="Based in">{{ fact_or_unknown(p, "headquarters") }}</td>
                         <td data-label="Size" class="size-cell">
                             {% set emp = p.fact("employee_count") %}

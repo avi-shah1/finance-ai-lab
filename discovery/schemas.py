@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from enrichment import formatting
+
 
 class QueryPlan(BaseModel):
     queries: list[str] = Field(description=(
@@ -25,7 +27,7 @@ class TriageItem(BaseModel):
         "'unclear' when the page doesn't say where the company is based or operates."))
     relevance: Literal["high", "medium", "low", "none"] = Field(description=(
         "How plausible a target this is for the search, judged only from the page text."))
-    description: str = Field(description="What the company does, in at most 25 words, from the text only.")
+    summary: list[str] = Field(description=formatting.SUMMARY_BULLET_RULES)
     match_reason: str = Field(description="One sentence: why it does or doesn't fit the search, citing what the text says.")
 
 

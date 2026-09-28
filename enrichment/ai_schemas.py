@@ -9,6 +9,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from .formatting import SUMMARY_BULLET_RULES
+
 Confidence = Literal["high", "medium", "low"]
 
 
@@ -68,4 +70,5 @@ class WebsiteItem(BaseModel):
 
 
 class WebsiteExtraction(BaseModel):
+    summary: list[str] = Field(description=SUMMARY_BULLET_RULES)
     items: list[WebsiteItem]

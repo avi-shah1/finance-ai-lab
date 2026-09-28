@@ -654,6 +654,14 @@ def insert_discovery_hits(search_id, rows):
         )
 
 
+def get_discovery_hits(search_id):
+    """The raw search results saved for a search (identified ones only)."""
+    with cursor(readonly=True) as cur:
+        cur.execute("SELECT * FROM discovery_hits WHERE search_id = %s AND company_id IS NOT NULL "
+                    "ORDER BY company_id, result_rank;", (search_id,))
+        return cur.fetchall()
+
+
 def upsert_search_candidates(search_id, rows):
     """rows: dicts with company_id, stage, match_reason, relevance, sources,
     rank. One round trip. A manually added candidate is left as it is."""

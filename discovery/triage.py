@@ -25,7 +25,8 @@ Rules:
 - Interpret regions geographically, not politically: Europe includes the UK, Switzerland and Norway. Only apply a narrower reading (e.g. EU members only) when the additional criteria ask for it.
 - If the text doesn't say where the company is based or operates, geography_fit is 'unclear', not 'no'.
 - A company that serves the target sector only as one of many unrelated markets is at most 'partial'.
-- Keep description and match_reason short and factual. Return one item for every candidate id."""
+- summary: 2-3 neutral third-person bullets on what the company does (never "you"/"we" or marketing phrases). match_reason: one short factual sentence.
+- Return one item for every candidate id."""
 
 
 @dataclass
@@ -33,7 +34,7 @@ class Verdict:
     name: str
     in_scope: bool
     relevance: str | None       # high / medium / low; None when out of scope
-    description: str
+    summary: str | None         # 2-3 bullets, newline-separated
     match_reason: str
     model: str
 
@@ -72,7 +73,7 @@ def _triage_batch(batch, sector, geography, criteria, search_id):
             name=formatting.squash(item.company_name, 80) or cand.name,
             in_scope=in_scope,
             relevance=item.relevance if in_scope else None,
-            description=formatting.squash(item.description, 220),
+            summary=formatting.clean_bullets(item.summary),
             match_reason=formatting.squash(item.match_reason, 300),
             model=meta["model"],
         )

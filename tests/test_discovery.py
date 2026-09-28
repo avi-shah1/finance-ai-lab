@@ -84,7 +84,9 @@ class TriageTests(unittest.TestCase):
 
     def item(self, **overrides):
         values = dict(candidate_id="C1", company_name="Accurx", is_operating_company=True, sector_fit="yes",
-                      geography_fit="yes", relevance="high", description="Patient messaging for GPs.",
+                      geography_fit="yes", relevance="high",
+                      summary=["- Sells patient messaging software to GP practices", " ", "Based in London, UK",
+                               "based in london, uk", "A fourth bullet", "A fifth bullet"],
                       match_reason="Healthcare software used by UK GP practices.")
         values.update(overrides)
         return TriageItem(**values)
@@ -103,6 +105,9 @@ class TriageTests(unittest.TestCase):
         v = self.run_triage(self.item())
         self.assertTrue(v.in_scope)
         self.assertEqual((v.relevance, v.name), ("high", "Accurx"))
+        # markers/blanks/duplicates removed, at most 3 bullets
+        self.assertEqual(v.summary, "Sells patient messaging software to GP practices\nBased in London, UK\n"
+                                    "A fourth bullet")
 
     def test_answers_for_unknown_ids_are_ignored(self):
         cand = identify.Candidate(domain="a.com", website="https://a.com", name="A", hits=[hit("https://a.com")])

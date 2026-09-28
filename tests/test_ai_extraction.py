@@ -195,7 +195,7 @@ class AIWebsiteTests(unittest.TestCase):
     @mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test"})
     def test_only_quoted_items_from_given_pages_are_kept(self):
         url = self.page["url"]
-        canned = WebsiteExtraction(items=[
+        canned = WebsiteExtraction(summary=["Sells scheduling software to NHS trusts", "Integrates with EMIS Web"], items=[
             WebsiteItem(fact_type="product", value="Patient Scheduling", source_url=url,
                         evidence_text="Patient Scheduling helps clinics fill appointments.", confidence="high"),
             WebsiteItem(fact_type="customer_segment", value="NHS trusts", source_url=url,
@@ -213,7 +213,10 @@ class AIWebsiteTests(unittest.TestCase):
 
         values = {(f.fact_type, f.value_text) for f in result.attach[21]["facts"]}
         self.assertEqual(values, {("product", "Patient Scheduling"), ("customer_segment", "NHS trusts"),
-                                  ("integration", "EMIS Web")})
+                                  ("integration", "EMIS Web"),
+                                  ("business_summary", "Sells scheduling software to NHS trusts\nIntegrates with EMIS Web")})
+        summary = next(f for f in result.attach[21]["facts"] if f.fact_type == "business_summary")
+        self.assertEqual(summary.evidence_type, "ai_interpretation")
         self.assertTrue(all(f.location == url and f.extraction_method == "llm_website"
                             for f in result.attach[21]["facts"]))
         self.assertEqual(len(result.detail["rejected"]), 2)

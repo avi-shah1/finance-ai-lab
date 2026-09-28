@@ -75,6 +75,23 @@ def normalise_name(name):
     return " ".join(words)
 
 
+SUMMARY_BULLET_RULES = (
+    "2-3 short bullet points on what the company does: what it sells, to whom, and where. "
+    "Third person and neutral (e.g. 'Sells cloud practice-management software to UK dental clinics'), "
+    "never 'you', 'we' or marketing language. At most 15 words each. Only facts stated in the text.")
+
+
+def clean_bullets(bullets, limit=3):
+    """Tidy Claude's summary bullets: drop list markers and blanks, cap the
+    length and count. Returns the bullets joined by newlines (or None)."""
+    cleaned = []
+    for b in bullets or []:
+        b = re.sub(r"^[\s•\-–*·]+", "", b or "").strip()
+        if b and b.lower() not in {c.lower() for c in cleaned}:
+            cleaned.append(squash(b, 140))
+    return "\n".join(cleaned[:limit]) or None
+
+
 def squash(text, limit=300):
     text = re.sub(r"\s+", " ", text or "").strip()
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"

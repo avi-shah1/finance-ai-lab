@@ -20,6 +20,7 @@ from enrichment import formatting, store
 from enrichment.base import CredentialsMissing, EnrichmentError, Fact, SourceDoc
 
 from . import identify, planner, profile, triage
+from .sources.base import SearchHit
 from .sources.exa import ExaSource
 
 log = logging.getLogger(__name__)
@@ -123,6 +124,27 @@ def run_discovery(search_id, source=None):
     return summary
 
 
+def backfill_summaries(search_id):
+    """Write "what they do" bullets for a search's discovered candidates from
+    the search results already saved (no new searching; one cheap Haiku pass).
+    Candidate stages and assessments are left untouched. Returns the count."""
+    search = database.get_search(search_id)
+    candidates = [c for c in database.get_candidates(search_id) if c["origin"] == "discovery"]
+    by_company = {}
+    for row in database.get_discovery_hits(search_id):
+        by_company.setdefault(row["company_id"], []).append(
+            SearchHit(source=row["source"], query=row["query"], rank=row["result_rank"] or 99,
+                      url=row["url"], title=row["title"], text=row["snippet"]))
+    cands = [identify.Candidate(domain=c["domain"], website=c["website"], name=c["name"], hits=by_company[c["id"]])
+             for c in candidates if c["domain"] and by_company.get(c["id"])]
+    verdicts = triage.triage(cands, search["target_sector"], search["geography"], search.get("criteria"),
+                             search_id=search_id)
+    ids = {c["domain"]: c["id"] for c in candidates}
+    store.save_sources_bulk("discovery", [(ids[c.domain], _profile_source(c, verdicts.get(c.domain)))
+                                          for c in cands])
+    return sum(1 for v in verdicts.values() if v.summary)
+
+
 def _status_writer(search_id):
     def write(message):
         database.set_search_status(search_id, "discovering", message)
@@ -163,8 +185,8 @@ def _profile_source(cand, verdict):
     p = profile.parse_profile(hit.text)
     today = date.today()
     facts = []
-    if verdict:
-        facts.append(Fact(fact_type="description", value_text=verdict.description,
+    if verdict and verdict.summary:
+        facts.append(Fact(fact_type="business_summary", value_text=verdict.summary,
                           evidence_type="ai_interpretation", confidence="medium",
                           excerpt=(hit.text or "").strip()[:300] or None, location=hit.url,
                           notes="AI summary of the search result text.", extraction_model=verdict.model))
