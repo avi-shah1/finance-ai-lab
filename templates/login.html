@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sign in · M&amp;A Target Screener</title>
+    <title>Sign in · AcquiScreener</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -12,8 +13,8 @@
 <body class="login-body">
     <main class="login-card">
         <div class="login-brand">
-            <span class="brand-mark" aria-hidden="true">M&amp;A</span>
-            <span>M&amp;A Target Screener</span>
+            <img class="brand-logo" src="{{ url_for('static', filename='logo.png') }}" alt="" width="36" height="36">
+            <span>AcquiScreener</span>
         </div>
         <h1>Sign in</h1>
         <p class="muted">Enter the password to continue.</p>

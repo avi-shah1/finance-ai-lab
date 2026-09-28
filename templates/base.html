@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}{% endblock %}{% if self.title() %} · {% endif %}M&amp;A Target Screener</title>
+    <title>{% block title %}{% endblock %}{% if self.title() %} · {% endif %}AcquiScreener</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -16,8 +17,8 @@
 <div class="app">
     <aside class="sidebar" aria-label="Main navigation">
         <a class="brand" href="{{ url_for('home') }}">
-            <span class="brand-mark" aria-hidden="true">M&amp;A</span>
-            <span class="brand-name">M&amp;A Target Screener</span>
+            <img class="brand-logo" src="{{ url_for('static', filename='logo.png') }}" alt="" width="30" height="30">
+            <span class="brand-name">AcquiScreener</span>
         </a>
         <nav class="side-nav">
             <a class="side-link {{ 'is-active' if active == 'home' }}" title="Home" href="{{ url_for('home') }}">

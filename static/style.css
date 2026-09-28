@@ -1,5 +1,5 @@
 /* ==========================================================================
-   M&A Target Screener: light, information-dense research UI.
+   AcquiScreener: light, information-dense research UI.
 
    One design system: tokens below, 8px spacing scale (4 / 8 / 12 / 16 / 24 /
    32), 6-8px radius on controls, 12px on containers, 1px #E5E7EB borders,
@@ -120,14 +120,9 @@ code, kbd { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; fon
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px; color: #fff; font-weight: 600; font-size: 15px; }
 .brand:hover { color: #fff; text-decoration: none; }
-.brand-mark {
-    display: grid; place-items: center;
-    width: 30px; height: 30px; flex: none;
-    border-radius: var(--r);
-    background: var(--accent);
-    color: #fff;
-    font-size: 10px; font-weight: 700; letter-spacing: -0.02em;
-}
+/* the logo sits on a white rounded tile, like an app icon */
+.brand-logo { width: 30px; height: 30px; flex: none; border-radius: var(--r); background: #fff; object-fit: cover; }
+.login-brand .brand-logo { width: 36px; height: 36px; border: 1px solid var(--border); }
 .side-nav { display: flex; flex-direction: column; gap: 2px; }
 .side-link {
     display: flex; align-items: center; gap: 12px;
