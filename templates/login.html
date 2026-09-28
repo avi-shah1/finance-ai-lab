@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in · M&amp;A Target Screener</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-body">
+    <main class="login-card">
+        <div class="login-brand">
+            <span class="brand-mark" aria-hidden="true">M&amp;A</span>
+            <span>M&amp;A Target Screener</span>
+        </div>
+        <h1>Sign in</h1>
+        <p class="muted">Enter the password to continue.</p>
+        {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
+        <form class="form" method="post" action="{{ url_for('login') }}">
+            <input type="hidden" name="next" value="{{ next }}">
+            <label>Password
+                <input type="password" name="password" autocomplete="current-password" required autofocus>
+            </label>
+            <button class="btn btn-primary btn-lg" type="submit">Sign in</button>
+        </form>
+    </main>
+</body>
+</html>

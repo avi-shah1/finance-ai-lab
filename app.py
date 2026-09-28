@@ -1,9 +1,11 @@
+import hmac
 import os
 import re
-from datetime import date
+import time
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
-from flask import Flask, abort, flash, redirect, render_template, request, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 
 import database
 import jobs
@@ -15,9 +17,73 @@ from enrichment.runner import AI_LABELS, PROVIDER_LABELS, STRUCTURED_LABELS, enr
 from profiles import CompanyProfile, build_profiles
 
 app = Flask(__name__)
-# Needed for flash messages. Set FLASK_SECRET_KEY in .env to keep messages
-# working across restarts; the random fallback is fine for local use.
+# Signs the session cookie (sign-in, flash messages). Set FLASK_SECRET_KEY so
+# sessions survive restarts; the random fallback is fine for local use only.
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(24)
+
+# ---------------------------------------------------------------------------
+# Sign-in: one shared password (APP_PASSWORD). Without it the app is open,
+# which is fine on your own computer; on Railway it refuses to serve instead,
+# so it can never go online unprotected.
+# ---------------------------------------------------------------------------
+
+APP_PASSWORD = os.environ.get("APP_PASSWORD") or ""
+ON_RAILWAY = bool(os.environ.get("RAILWAY_ENVIRONMENT_NAME") or os.environ.get("RAILWAY_ENVIRONMENT"))
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,          # not readable by page scripts
+    SESSION_COOKIE_SAMESITE="Lax",         # not sent with other sites' form posts
+    SESSION_COOKIE_SECURE=ON_RAILWAY,      # HTTPS only when deployed
+    PERMANENT_SESSION_LIFETIME=timedelta(days=14),
+)
+OPEN_ENDPOINTS = {"login", "static", "healthz"}
+
+
+@app.before_request
+def require_sign_in():
+    if request.endpoint in OPEN_ENDPOINTS:
+        return None
+    if ON_RAILWAY and not (APP_PASSWORD and os.environ.get("FLASK_SECRET_KEY")):
+        return ("Not configured: set APP_PASSWORD and FLASK_SECRET_KEY in the Railway variables.", 503)
+    if APP_PASSWORD and not session.get("signed_in"):
+        target = request.full_path if request.method == "GET" else "/"
+        return redirect(url_for("login", next=target))
+    return None
+
+
+def _safe_next(target):
+    """Only same-site paths, so the sign-in page can't redirect elsewhere."""
+    return target if target and target.startswith("/") and not target.startswith("//") else url_for("home")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not APP_PASSWORD:
+        return redirect(url_for("home"))
+    target = _safe_next(request.values.get("next"))
+    error = None
+    if request.method == "POST":
+        attempt = (request.form.get("password") or "").encode()
+        if hmac.compare_digest(attempt, APP_PASSWORD.encode()):   # constant-time comparison
+            session.clear()
+            session.permanent = True
+            session["signed_in"] = True
+            return redirect(target)
+        time.sleep(1)                                             # slows down guessing
+        error = "That password isn't right."
+    return render_template("login.html", error=error, next=target), (401 if error else 200)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+@app.route("/healthz")
+def healthz():
+    """For Railway's health check: the app is up (no sign-in needed, no data shown)."""
+    return "ok"
+
 
 
 # ---------------------------------------------------------------------------
