@@ -551,7 +551,7 @@ a.src-name { color: var(--accent); }
           border-color: rgba(56, 225, 255, 0.25); box-shadow: 0 0 40px -24px var(--accent-glow); }
 .report-head { display: flex; justify-content: space-between; gap: 1.5rem; align-items: flex-start; }
 .report-verdict { min-width: 0; }
-.verdict-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.35rem 0 0.5rem; }
+.verdict-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.8rem 0 0.6rem; }
 .verdict-row .rating { font-size: 0.95rem; padding: 0.3rem 0.9rem; }
 .headline { font-size: 1.15rem; line-height: 1.45; margin: 0 0 0.4rem; max-width: 80ch; color: var(--text); }
 .report-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; flex: none; }
