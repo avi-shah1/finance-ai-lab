@@ -75,11 +75,15 @@ class OverallAssessment(BaseModel):
         "e.g. 'Already majority-owned by Henry Schein One, so not independently available.'"))
     rationale: str = Field(description="2-3 sentences drawing on the four dimensions, including the biggest risk.")
     evidence_ids: list[str] = EVIDENCE_IDS
-    strengths: list[Point] = Field(description="Up to 3 reasons this could be a good acquisition, each citing evidence.")
+    strengths: list[Point] = Field(description=(
+        "Up to 3 substantive reasons this could be a good acquisition (fit, customers, growth), each citing evidence. "
+        "Being small or cheap is not a strength."))
     risks: list[Point] = Field(description=(
-        "Up to 3 risks or blockers. Cite evidence where it exists; a risk can also be a gap in the evidence."))
+        "Up to 3 substantive risks or blockers, most important strategic concern first. Cite evidence where it "
+        "exists; a risk can also be a gap in the evidence. A size mismatch is only a risk if it blocks a deal."))
     next_checks: list[str] = Field(description=(
-        "Up to 3 short questions an analyst should answer next, e.g. 'Is the founder open to selling?'"))
+        "Up to 4 short questions an analyst should answer next. One must ask who owns the target and whether "
+        "they would be open to a sale."))
 
 
 AssessmentResult = create_model(

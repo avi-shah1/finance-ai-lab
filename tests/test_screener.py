@@ -82,6 +82,37 @@ class CitationRuleTests(unittest.TestCase):
         # evidence behind strengths and risks is linked to the overall row
         self.assertEqual((sorted(overall["fact_ids"]), overall["event_ids"]), ([1, 2], [9]))
 
+    def test_size_only_points_are_dropped(self):
+        pts = [{"text": t, "evidence_ids": []} for t in [
+            "Massive scale mismatch between Salesforce's market capitalisation and this 12-person micro-company.",
+            "Extreme size mismatch versus Salesforce makes strategic rationale unclear.",
+            "Trivial size relative to Salesforce makes any deal financially easy.",
+            "Target's financial scale is immaterial relative to Salesforce's size, reducing strategic significance.",
+            "Too large for the buyer to acquire: revenue is ten times the buyer's.",          # genuine blocker: kept
+            "No strategic or product adjacency to Salesforce's CRM/AI platform strategy.",     # kept
+            "Headcount has shrunk 25% year-on-year.",                                          # kept
+        ]]
+        kept = [p["text"] for p in assess.drop_size_only_points(pts)]
+        self.assertEqual(kept, [pts[4]["text"], pts[5]["text"], pts[6]["text"]])
+
+    def test_ownership_question_always_present(self):
+        added = assess.ensure_ownership_check(["What is revenue?", "Why did headcount fall?", "Any AI plans?"], "iSmile")
+        self.assertEqual(added[-1], "Who owns iSmile, and would they be open to a sale?")
+        self.assertEqual(len(added), 4)
+        full = assess.ensure_ownership_check(["a?", "b?", "c?", "d?"], "X")          # makes room for it
+        self.assertEqual((len(full), full[-1]), (4, "Who owns X, and would they be open to a sale?"))
+        # "Salesforce" contains "sale" but is not an ownership question
+        sf = assess.ensure_ownership_check(["Does Salesforce have any interest in dental?"], "iSmile")
+        self.assertEqual(sf[-1], "Who owns iSmile, and would they be open to a sale?")
+        present = ["Would Henry Schein One consider divesting Dentally?", "What is revenue?"]
+        self.assertEqual(assess.ensure_ownership_check(present, "Dentally"), present)   # already asked
+        rows, _ = assess.to_rows(answer(strategic_fit={"rating": "strong", "gist": "g", "facts": "f",
+                                                       "interpretation": "i", "evidence_ids": ["F1"],
+                                                       "criteria": criterion_list("strategic_fit", ids=["F1"])}),
+                                 VALID, "Acme")
+        checks = next(r for r in rows if r["dimension"] == "overall")["highlights"]["next_checks"]
+        self.assertTrue(any("sell" in q or "sale" in q for q in checks))
+
     def test_buyer_brief_is_citable_but_not_a_fact(self):
         crit = criterion_list("strategic_fit", ids=["BRIEF"])
         rows, dropped = assess.to_rows(answer(strategic_fit={"rating": "strong", "gist": "g", "facts": "f", "interpretation": "i",

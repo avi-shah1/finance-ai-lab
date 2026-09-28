@@ -16,6 +16,7 @@ There are no numeric scores anywhere.
 """
 
 import logging
+import re
 
 import database
 import screening
@@ -26,9 +27,39 @@ from .schemas import AssessmentResult
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "assess-v4"   # v2: headline, strengths/risks/next checks, buyer brief; v3: no IDs in prose; v4: dimension gists
+PROMPT_VERSION = "assess-v5"   # v2: headline, strengths/risks/next checks, buyer brief; v3: no IDs in prose;
+                               # v4: dimension gists; v5: substantive risks, ownership question, 4 next checks
 BRIEF_ID = "BRIEF"             # evidence ID of the analyst's buyer brief
 MAX_POINTS = 3
+MAX_NEXT_CHECKS = 4
+# Whole words only: "Salesforce" must not count as "sale".
+_OWNERSHIP_WORDS = re.compile(r"\b(own|owns|owned|owner|owners|ownership|sell|selling|sale|divest\w*|"
+                              r"shareholders?|founders?)\b", re.I)
+
+
+# A target merely being small next to a big buyer is neither a strength nor a
+# risk (see the prompt). Claude sometimes says it anyway, so code drops such
+# points. A genuine blocker ("far too large to acquire") is not matched.
+_SIZE_ONLY = re.compile(
+    r"\b(size|scale)\s+(mismatch|gap|disparity|difference)\b|\b(trivially|tiny|very) small\b.{0,40}\b(relative|compared|next)\b|"
+    r"\btiny relative\b|\beasy to (afford|acquire|buy)\b|\bfinancially easy\b|\beasily affordable\b|\btrivially affordable\b|"
+    r"\b(immaterial|negligible|insignificant|trivial)\b.{0,60}\b(relative|compared)\b|"
+    r"\brelative to [^.]{0,40}\b(size|scale|market cap\w*)\b",
+    re.I)
+
+
+def drop_size_only_points(points):
+    return [p for p in points or [] if not _SIZE_ONLY.search(p.get("text", ""))]
+
+
+def ensure_ownership_check(checks, company_name):
+    """Make sure one next check asks who owns the target and whether they
+    would sell: the first thing any acquirer needs to know. Used when an
+    assessment is stored and when older ones are displayed."""
+    checks = list(checks or [])
+    if not any(_OWNERSHIP_WORDS.search(q) for q in checks):
+        checks = checks[:MAX_NEXT_CHECKS - 1] + [f"Who owns {company_name}, and would they be open to a sale?"]
+    return checks[:MAX_NEXT_CHECKS]
 MAX_PER_TYPE = 12       # values per multi-valued fact type (e.g. products)
 MAX_EVENTS = 15
 EXCERPT_CHARS = 160
@@ -55,6 +86,8 @@ Rules:
 - The target already matches the search's sector and geography; judge how good a target it is, not whether it is in scope.
 - Ratings: very_strong, strong, mixed, weak, insufficient_evidence. Overall: very_strong_fit, good_fit, mixed, weak_fit, avoid ('avoid' only for a clear evidenced blocker, e.g. already acquired, dissolved, far too large to buy).
 - The overall headline gives the verdict and its deciding reason in one sentence. Strengths and risks are the few points that matter most, each backed by cited evidence where possible; next_checks are what an analyst should find out next.
+- Strengths and risks must be substantive: strategic and product fit with the buyer, customers, ownership, growth or contraction, gaps in the evidence. A target being small next to a large buyer is not a strength ("easy to afford") or a risk ("size mismatch") in itself; mention size only when it is a genuine blocker, e.g. the target is too large for the buyer to acquire. Lead the risks with the most important strategic concern.
+- next_checks: up to 4 questions. One must always ask who owns the target and whether they would be open to a sale (or, if the owner is already known from the evidence, whether that owner would sell).
 - Be concise. No numbers you were not given."""
 
 
@@ -88,7 +121,7 @@ def assess_candidate(search, buyer_profile, company_id):
 
     result, meta = llm.extract(SYSTEM, content, AssessmentResult, task="assessment", max_tokens=16000,
                                search_id=search["id"], company_id=company_id)
-    rows, dropped = to_rows(result, valid)
+    rows, dropped = to_rows(result, valid, target.company["name"])
     database.save_ai_assessment(search["id"], company_id, meta["model"], PROMPT_VERSION, rows)
     overall = next((r["rating"] for r in rows if r["dimension"] == "overall"), None)
     return {"overall": overall, "rows": len(rows), "dropped_citations": dropped, "cost_usd": meta["cost_usd"]}
@@ -147,7 +180,7 @@ def _criteria_guide():
     return "Dimensions and criteria:\n" + "\n".join(parts)
 
 
-def to_rows(result, valid):
+def to_rows(result, valid, company_name=None):
     """Turn Claude's answer into assessment rows, enforcing the citation
     rules. Returns (rows, number of citations removed)."""
     rows, dropped = [], 0
@@ -197,8 +230,9 @@ def to_rows(result, valid):
         o = result.overall
         cited = keep(o.evidence_ids)
         # A strength must rest on cited evidence; a risk may be a gap in it.
-        strengths = [p for p in (_point(p, keep) for p in o.strengths) if p["evidence_ids"]][:MAX_POINTS]
-        risks = [_point(p, keep) for p in o.risks][:MAX_POINTS]
+        strengths = drop_size_only_points(
+            [p for p in (_point(p, keep) for p in o.strengths) if p["evidence_ids"]])[:MAX_POINTS]
+        risks = drop_size_only_points([_point(p, keep) for p in o.risks])[:MAX_POINTS]
         for p in strengths + risks:
             cited += [x for x in p["evidence_ids"] if x not in cited]
         facts, events = split(cited)
@@ -207,8 +241,9 @@ def to_rows(result, valid):
                      "rationale": formatting.squash(o.rationale, 800),
                      "interpretation": formatting.squash(o.rationale, 800),
                      "highlights": {"strengths": strengths, "risks": risks,
-                                    "next_checks": [formatting.squash(q, 200) for q in o.next_checks
-                                                    if q.strip()][:MAX_POINTS]},
+                                    "next_checks": ensure_ownership_check(
+                                        [formatting.squash(q, 200) for q in o.next_checks if q.strip()],
+                                        company_name or "the target")},
                      "fact_ids": facts, "event_ids": events, "cites_brief": BRIEF_ID in cited})
     return rows, dropped
 

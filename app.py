@@ -9,7 +9,7 @@ import database
 import jobs
 import screening
 from enrichment import formatting
-from screener import deep
+from screener import assess, deep
 from enrichment.runner import AI_LABELS, PROVIDER_LABELS, STRUCTURED_LABELS, enrich_company
 from profiles import CompanyProfile, build_profiles
 
@@ -422,6 +422,17 @@ def show_company(company_id):
         if search:
             assessments = database.get_assessments(search_id, [company_id]).get(company_id, {})
             ai_assessment = database.get_ai_assessment(search_id, company_id)
+            # Reports made before these rules existed still get them: an
+            # ownership question, and no "it's small next to the buyer" points.
+            overall = ai_assessment.get(("overall", None))
+            if overall and overall.get("highlights"):
+                hl = overall["highlights"]
+                overall["highlights"] = {
+                    **hl,
+                    "strengths": assess.drop_size_only_points(hl.get("strengths")),
+                    "risks": assess.drop_size_only_points(hl.get("risks")),
+                    "next_checks": assess.ensure_ownership_check(hl.get("next_checks"), profile.company["name"]),
+                }
             candidate = next((c for c in database.get_candidates(search_id) if c["id"] == company_id), None)
 
     # Cited evidence can be the buyer's too (e.g. its products), so look up
